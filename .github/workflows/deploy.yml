@@ -1,0 +1,22 @@
+name: Deploy to Google Cloud
+on:
+  push:
+    branches: [ main ]
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: 'auth'
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: '${{ secrets.GCP_SA_KEY }}'
+      - id: 'deploy'
+        uses: 'google-github-actions/deploy-cloud-functions@v2'
+        with:
+          name: 'garis-offer-webhook'
+          runtime: 'python312'
+          region: 'us-central1'
+          entry_point: 'webhook'
+          environment_variables:
+            BOT_TOKEN: '${{ secrets.BOT_TOKEN }}'
