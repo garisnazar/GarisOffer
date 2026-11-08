@@ -1,14 +1,16 @@
 import os
 import logging
+import asyncio
+from aiohttp import web
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 logging.basicConfig(level=logging.INFO)
 
-BOT_TOKEN = os.environ.get("9231998177:AAEFkqiFf9ihgkzjBk-DJJSoeyh149pUmew")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 # ВАШ ID (впишите цифры сюда!)
-ADMIN_ID = 5151757168 
+ADMIN_ID = 123456789 
 ALLOWED_USERS = {ADMIN_ID} 
 
 bot = Bot(token=BOT_TOKEN)
@@ -112,8 +114,23 @@ async def decline_handler(callback: types.CallbackQuery):
     await callback.message.edit_text(text=new_text, reply_markup=None, parse_mode="HTML")
     await callback.answer()
 
-async def webhook(request):
-    if request.method == "POST":
-        update = types.Update.model_validate(await request.json(), context={"bot": bot})
-        await dp.feed_update(bot, update)
-    return "ok"
+# --- СЕРВЕР ДЛЯ RENDER (чтобы бот не падал) ---
+async def handle(request):
+    return web.Response(text="Bot is alive!")
+
+async def main():
+    # Запускаем мини-сайт для Render
+    app = web.Application()
+    app.router.add_get('/', handle)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    
+    print("Бот запущен и слушает порт", port)
+    # Запускаем самого бота
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
