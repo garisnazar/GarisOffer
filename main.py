@@ -8,9 +8,9 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 logging.basicConfig(level=logging.INFO)
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
+BOT_TOKEN = os.environ.get("9231998177:AAEFkqiFf9ihgkzjBk-DJJSoeyh149pUmew")
 # ВАШ ID (впишите цифры сюда!)
-ADMIN_ID = 123456789 
+ADMIN_ID = 5151757168 
 ALLOWED_USERS = {ADMIN_ID} 
 
 bot = Bot(token=BOT_TOKEN)
