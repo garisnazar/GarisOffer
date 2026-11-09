@@ -4,3 +4,6 @@ compatibility_date = "2024-09-23"
 
 [observability]
 enabled = true
+[[kv_namespaces]]
+binding = "USERS_KV"
+id = "7fc0e23125ac4bf3ac996dd6935f14c0"
