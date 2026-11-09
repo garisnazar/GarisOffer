@@ -3,7 +3,7 @@ from js import fetch
 import json
 
 ADMIN_ID = 5151757168  # Ваш ID
-BOT_TOKEN = "ВАШ_ТОКЕН_ИЗ_BOTFATHER"  # Вставьте ваш токен
+BOT_TOKEN = "9231998177:AAEFkqiFf9ihgkzjBk-DJJSoeyh149pUmew"  # Вставьте ваш токен
 
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
