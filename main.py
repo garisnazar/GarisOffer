@@ -6,7 +6,7 @@ import urllib.parse
 
 # Не забудьте проверить эти две строки!
 ADMIN_ID = 5151757168  # Ваш ID
-BOT_TOKEN = "ВАШ_ТОКЕН_ИЗ_BOTFATHER"  # ВСТАВЬТЕ ВАШ ТОКЕН!
+BOT_TOKEN = "9231998177:AAEFkqiFf9ihgkzjBk-DJJSoeyh149pUmew"  # ВСТАВЬТЕ ВАШ ТОКЕН!
 
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
