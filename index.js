@@ -10,13 +10,23 @@ export default {
     try {
       const update = await request.json();
 
-      // Обработка команды /start
+      // --- ОБРАБОТКА КОМАНДЫ /start ---
       if (update.message && update.message.text === "/start") {
         const chatId = update.message.chat.id;
         const userId = update.message.from.id;
-        let text = "";
+        const username = update.message.from.username;
 
-        if (userId !== ADMIN_ID) {
+        // ВАЖНО: Сохраняем юзернейм в базу при любом старте (даже если доступ закрыт)
+        if (username) {
+          await env.USERS_KV.put(`username:${username.toLowerCase()}`, userId.toString());
+        }
+
+        // Проверяем доступ: Вы (админ) или пользователь в белом списке
+        const isAdmin = userId === ADMIN_ID;
+        const isAllowed = await env.USERS_KV.get(`user:${userId}`);
+        
+        let text = "";
+        if (!isAdmin && !isAllowed) {
           text = "🔒 <b>Доступ закрыт.</b>\n\nЭтот бот приватный.\nОбратитесь к владельцу (@gwrex).";
         } else {
           text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n⏳ <b>Доступ:</b> ∞ бессрочно\n\nОткрой чат и напиши:\n<code>@GarisOfferBot t.me/nft/ViceCream-355398 300 stars</code>`;
@@ -25,11 +35,47 @@ export default {
         await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" });
       }
 
-      // Обработка Inline-запросов (@GarisOfferBot)
+      // --- ОБРАБОТКА КОМАНДЫ /add (только для вас) ---
+      if (update.message && update.message.text.startsWith("/add ")) {
+        const senderId = update.message.from.id;
+        
+        if (senderId === ADMIN_ID) {
+          let target = update.message.text.split(" ")[1].trim();
+          
+          if (target.startsWith("@")) {
+            // Если ввели @username
+            const uname = target.slice(1).toLowerCase();
+            const foundId = await env.USERS_KV.get(`username:${uname}`);
+            
+            if (foundId) {
+              await env.USERS_KV.put(`user:${foundId}`, "true");
+              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `✅ Пользователь <b>@${uname}</b> добавлен. Теперь он может пользоваться ботом.` });
+            } else {
+              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `⚠️ Пользователь <b>@${uname}</b> не найден в базе.\n\nПопросите его нажать /start в боте, после чего вы сможете его добавить.` });
+            }
+          } else {
+            // Если ввели просто цифры (ID)
+            await env.USERS_KV.put(`user:${target}`, "true");
+            await callApi("sendMessage", { chat_id: ADMIN_ID, text: `✅ Пользователь с ID <code>${target}</code> добавлен.` });
+          }
+        }
+      }
+
+      // --- ОБРАБОТКА INLINE-ЗАПРОСОВ (@GarisOfferBot) ---
       if (update.inline_query) {
         const iq = update.inline_query;
-        const parts = iq.query.split(" ");
+        const userId = iq.from.id;
+        
+        // Проверяем доступ для инлайна
+        const isAdmin = userId === ADMIN_ID;
+        const isAllowed = await env.USERS_KV.get(`user:${userId}`);
 
+        if (!isAdmin && !isAllowed) {
+            // Если нет доступа, ничего не отвечаем
+            return new Response("OK", { status: 200 });
+        }
+
+        const parts = iq.query.split(" ");
         if (parts.length >= 3) {
           const giftId = parts[0];
           const amount = parts[1];
@@ -55,7 +101,7 @@ export default {
         }
       }
 
-      // Обработка нажатий на кнопки
+      // --- ОБРАБОТКА НАЖАТИЙ НА КНОПКИ ---
       if (update.callback_query) {
         const cq = update.callback_query;
         const data = cq.data;
