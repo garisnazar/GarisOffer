@@ -1,8 +1,6 @@
 name = "garisoffer"
-main = "main.py"
+main = "index.js"
 compatibility_date = "2024-09-23"
-compatibility_flags = ["python_workers"]
-[vars]
-PYTHON_VERSION = "3.12"
+
 [observability]
 enabled = true
