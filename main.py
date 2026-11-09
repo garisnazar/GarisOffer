@@ -3,7 +3,7 @@ from js import fetch
 import json
 
 ADMIN_ID = 5151757168  # Ваш ID
-BOT_TOKEN = "9231998177:AAEFkqiFf9ihgkzjBk-DJJSoeyh149pUmew"  # Вставьте ваш токен
+BOT_TOKEN = "9231998177:AAEFkqiFf9ihgkzjBk-DJJSoeyh149pUmew"  # ВСТАВЬТЕ ВАШ ТОКЕН СЮДА!
 
 class Default(WorkerEntrypoint):
     async def fetch(self, request):
@@ -15,7 +15,7 @@ class Default(WorkerEntrypoint):
         except Exception:
             return Response("Invalid JSON", status=400)
 
-        # Обработка обычных сообщений (команда /start)
+        # Обработка команды /start
         if "message" in update:
             message = update["message"]
             chat_id = message["chat"]["id"]
@@ -34,9 +34,14 @@ class Default(WorkerEntrypoint):
                         "Открой чат и напиши:\n"
                         "<code>@GarisOfferBot JesterHat 300 stars</code>"
                     )
-                await self._send_message(chat_id, reply)
+                
+                # Отправка через GET запрос (самый надежный способ на Cloudflare)
+                import urllib.parse
+                text_encoded = urllib.parse.quote(reply)
+                url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage?chat_id={chat_id}&text={text_encoded}&parse_mode=HTML"
+                await fetch(url)
 
-        # Обработка inline-запросов (вызов через @GarisOfferBot)
+        # Обработка inline-запросов
         if "inline_query" in update:
             iq = update["inline_query"]
             parts = iq["query"].split()
@@ -60,28 +65,18 @@ class Default(WorkerEntrypoint):
                         ]
                     }
                 }]
-                await self._api_call("answerInlineQuery", {
+                
+                # Для инлайна POST обязателен
+                url = f"https://api.telegram.org/bot{BOT_TOKEN}/answerInlineQuery"
+                payload = json.dumps({
                     "inline_query_id": iq["id"],
-                    "results": json.dumps(results),
+                    "results": results,
                     "cache_time": 0
+                })
+                await fetch(url, {
+                    "method": "POST",
+                    "headers": {"Content-Type": "application/json"},
+                    "body": payload
                 })
 
         return Response("OK", status=200)
-
-    # Вспомогательный метод для отправки сообщений
-    async def _send_message(self, chat_id, text):
-        await self._api_call("sendMessage", {
-            "chat_id": chat_id,
-            "text": text,
-            "parse_mode": "HTML"
-        })
-
-    # Вспомогательный метод для запросов к Telegram API через js.fetch
-    async def _api_call(self, method, payload):
-        url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
-        resp = await fetch(url, {
-            "method": "POST",
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps(payload)
-        })
-        return await resp.json()
