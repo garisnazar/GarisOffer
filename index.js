@@ -9,6 +9,12 @@ export default {
 
     try {
       const update = await request.json();
+      
+      // БЕЗОПАСНОЕ ПОДКЛЮЧЕНИЕ К БАЗЕ
+      const kv = env.USERS_KV;
+      if (!kv) {
+        console.error("ВНИМАНИЕ: База данных USERS_KV не привязана в Cloudflare!");
+      }
 
       // --- ОБРАБОТКА КОМАНДЫ /start ---
       if (update.message && update.message.text === "/start") {
@@ -16,17 +22,22 @@ export default {
         const userId = update.message.from.id;
         const username = update.message.from.username;
 
-        // Сохраняем юзернейм в базу, чтобы вы могли добавлять по @username
-        if (username) {
-          await env.USERS_KV.put(`username:${username.toLowerCase()}`, userId.toString());
+        // Безопасно сохраняем юзернейм
+        if (username && kv) {
+          await kv.put(`username:${username.toLowerCase()}`, userId.toString());
         }
 
         const isAdmin = userId === ADMIN_ID;
-        const isAllowed = await env.USERS_KV.get(`user:${userId}`);
+        let isAllowed = false;
+        
+        // Безопасно проверяем доступ
+        if (kv) {
+          isAllowed = await kv.get(`user:${userId}`);
+        }
         
         let text = "";
         if (!isAdmin && !isAllowed) {
-          text = "🔒 <b>Доступ закрыт.</b>\n\nЭтот бот приватный.\nОбратитесь к владельцу (@gwrex).";
+          text = "🔒 <b>Доступ закрыт.</b>\n\nЭтот бот приватный.\nОбратитесь к владельцу (@gwrex).\n\nВаш ID: <code>" + userId + "</code>";
         } else {
           text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n⏳ <b>Доступ:</b> ∞ бессрочно\n\nОткрой чат и напиши:\n<code>@GarisOfferBot t.me/nft/ViceCream-355398 300 stars</code>`;
         }
@@ -39,32 +50,40 @@ export default {
         const senderId = update.message.from.id;
         
         if (senderId === ADMIN_ID) {
+          if (!kv) {
+            await callApi("sendMessage", { chat_id: ADMIN_ID, text: "❌ <b>Ошибка:</b> База данных KV не подключена в Cloudflare!" });
+            return new Response("OK", { status: 200 });
+          }
+
           let target = update.message.text.split(" ")[1].trim();
           
           if (target.startsWith("@")) {
             const uname = target.slice(1).toLowerCase();
-            const foundId = await env.USERS_KV.get(`username:${uname}`);
+            const foundId = await kv.get(`username:${uname}`);
             
             if (foundId) {
-              await env.USERS_KV.put(`user:${foundId}`, "true");
+              await kv.put(`user:${foundId}`, "true");
               await callApi("sendMessage", { chat_id: ADMIN_ID, text: `✅ Пользователь <b>@${uname}</b> добавлен.` });
             } else {
               await callApi("sendMessage", { chat_id: ADMIN_ID, text: `⚠️ Пользователь <b>@${uname}</b> не найден в базе.\n\nПопросите его нажать /start в боте, после чего вы сможете его добавить.` });
             }
           } else {
-            await env.USERS_KV.put(`user:${target}`, "true");
+            await kv.put(`user:${target}`, "true");
             await callApi("sendMessage", { chat_id: ADMIN_ID, text: `✅ Пользователь с ID <code>${target}</code> добавлен.` });
           }
         }
       }
 
-      // --- ОБРАБОТКА INLINE-ЗАПРОСОВ (@GarisOfferBot) ---
+      // --- ОБРАБОТКА INLINE-ЗАПРОСОВ ---
       if (update.inline_query) {
         const iq = update.inline_query;
         const userId = iq.from.id;
         
         const isAdmin = userId === ADMIN_ID;
-        const isAllowed = await env.USERS_KV.get(`user:${userId}`);
+        let isAllowed = false;
+        if (kv) {
+          isAllowed = await kv.get(`user:${userId}`);
+        }
 
         if (!isAdmin && !isAllowed) {
             return new Response("OK", { status: 200 });
@@ -76,7 +95,6 @@ export default {
           const amount = parts[1];
           const currency = parts[2];
 
-          // БЕРЕМ ИМЯ ИЗ ПРОФИЛЯ ТЕЛЕГРАМ
           let senderName = iq.from.first_name || "";
           if (iq.from.last_name) senderName += " " + iq.from.last_name;
           if (!senderName && iq.from.username) senderName = "@" + iq.from.username;
@@ -127,7 +145,7 @@ export default {
 
       return new Response("OK", { status: 200 });
     } catch (error) {
-      console.error("ОШИБКА:", error.message);
+      console.error("КРИТИЧЕСКАЯ ОШИБКА:", error.message);
       return new Response("Error: " + error.message, { status: 500 });
     }
   }
