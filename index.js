@@ -1,5 +1,5 @@
 const ADMIN_ID = 5151757168; // Ваш ID
-const BOT_TOKEN = "9231998177:AAEFkqiFf9ihgkzjBk-DJJSoeyh149pUmew"; // ВСТАВЬТЕ ВАШ ТОКЕН!
+const BOT_TOKEN = "9231998177:AAEFkqiFf9ihgkzjBk-DJJSoeyh149pUmew"; // Убедись, что тут полный токен!
 
 export default {
   async fetch(request, env, ctx) {
@@ -14,67 +14,17 @@ export default {
       if (update.message && update.message.text === "/start") {
         const chatId = update.message.chat.id;
         const userId = update.message.from.id;
-        const username = update.message.from.username;
 
-        // ВАЖНО: Сохраняем юзернейм в базу при любом старте (даже если доступ закрыт)
-        if (username) {
-          await env.USERS_KV.put(`username:${username.toLowerCase()}`, userId.toString());
-        }
-
-        // Проверяем доступ: Вы (админ) или пользователь в белом списке
-        const isAdmin = userId === ADMIN_ID;
-        const isAllowed = await env.USERS_KV.get(`user:${userId}`);
-        
-        let text = "";
-        if (!isAdmin && !isAllowed) {
-          text = "🔒 <b>Доступ закрыт.</b>\n\nЭтот бот приватный.\nОбратитесь к владельцу (@gwrex).";
-        } else {
-          text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n⏳ <b>Доступ:</b> ∞ бессрочно\n\nОткрой чат и напиши:\n<code>@GarisOfferBot t.me/nft/ViceCream-355398 300 stars</code>`;
-        }
+        // Временно пускаем всех
+        let text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n⏳ <b>Доступ:</b> ∞ бессрочно\n\nОткрой чат и напиши:\n<code>@GarisOfferBot t.me/nft/ViceCream-355398 300 stars</code>`;
 
         await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" });
-      }
-
-      // --- ОБРАБОТКА КОМАНДЫ /add (только для вас) ---
-      if (update.message && update.message.text.startsWith("/add ")) {
-        const senderId = update.message.from.id;
-        
-        if (senderId === ADMIN_ID) {
-          let target = update.message.text.split(" ")[1].trim();
-          
-          if (target.startsWith("@")) {
-            // Если ввели @username
-            const uname = target.slice(1).toLowerCase();
-            const foundId = await env.USERS_KV.get(`username:${uname}`);
-            
-            if (foundId) {
-              await env.USERS_KV.put(`user:${foundId}`, "true");
-              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `✅ Пользователь <b>@${uname}</b> добавлен. Теперь он может пользоваться ботом.` });
-            } else {
-              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `⚠️ Пользователь <b>@${uname}</b> не найден в базе.\n\nПопросите его нажать /start в боте, после чего вы сможете его добавить.` });
-            }
-          } else {
-            // Если ввели просто цифры (ID)
-            await env.USERS_KV.put(`user:${target}`, "true");
-            await callApi("sendMessage", { chat_id: ADMIN_ID, text: `✅ Пользователь с ID <code>${target}</code> добавлен.` });
-          }
-        }
       }
 
       // --- ОБРАБОТКА INLINE-ЗАПРОСОВ (@GarisOfferBot) ---
       if (update.inline_query) {
         const iq = update.inline_query;
-        const userId = iq.from.id;
         
-        // Проверяем доступ для инлайна
-        const isAdmin = userId === ADMIN_ID;
-        const isAllowed = await env.USERS_KV.get(`user:${userId}`);
-
-        if (!isAdmin && !isAllowed) {
-            // Если нет доступа, ничего не отвечаем
-            return new Response("OK", { status: 200 });
-        }
-
         const parts = iq.query.split(" ");
         if (parts.length >= 3) {
           const giftId = parts[0];
@@ -127,12 +77,13 @@ export default {
 
       return new Response("OK", { status: 200 });
     } catch (error) {
+      // Если что-то упадет, мы увидим ошибку в логах
+      console.error("ОШИБКА:", error.message);
       return new Response("Error: " + error.message, { status: 500 });
     }
   }
 };
 
-// Вспомогательная функция для запросов к Telegram API
 async function callApi(method, body) {
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
   const response = await fetch(url, {
