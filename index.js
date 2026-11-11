@@ -89,14 +89,6 @@ export default {
       if (update.callback_query) {
         const cq = update.callback_query;
         
-        // Получаем данные того, кто НАЖАЛ на кнопку
-        const buyer = cq.from;
-        let buyerName = buyer.first_name || "";
-        if (buyer.last_name) buyerName += " " + buyer.last_name;
-        if (!buyerName) buyerName = buyer.username ? "@" + buyer.username : "Пользователь";
-
-        let buyerLink = buyer.username ? "https://t.me/" + buyer.username : `tg://user?id=${buyer.id}`;
-
         // 1. МГНОВЕННО ОТВЕЧАЕМ (убираем загрузку и показываем окошко)
         if (cq.data === "acc") {
           await callApi("answerCallbackQuery", { 
@@ -114,18 +106,17 @@ export default {
         const messageId = cq.message.message_id;
         const messageText = cq.message.text || cq.message.caption || "";
 
-        // Ищем сумму, чтобы подставить в текст
+        const buyer = cq.from;
+        let buyerName = buyer.first_name || "";
+        if (buyer.last_name) buyerName += " " + buyer.last_name;
+        if (!buyerName) buyerName = buyer.username ? "@" + buyer.username : "Пользователь";
+
+        // Ссылка на профиль. Если нет @username, ведем на твой профиль (gwrex)
+        let buyerLink = buyer.username ? "https://t.me/" + buyer.username : "https://t.me/gwrex";
+
         const amountMatch = messageText.match(/(\d+)\s*⭐/);
         const amount = amountMatch ? amountMatch[1] : "указанную сумму";
 
-        // 2. УДАЛЯЕМ СТАРОЕ СООБЩЕНИЕ
-        try {
-          await callApi("deleteMessage", { chat_id: chatId, message_id: messageId });
-        } catch (e) {
-          console.error("Не удалось удалить сообщение:", e.message);
-        }
-
-        // 3. ОТПРАВЛЯЕМ НОВОЕ СООБЩЕНИЕ
         let newText = "";
         let newMarkup = { inline_keyboard: [] };
 
@@ -136,15 +127,27 @@ export default {
           };
         } else if (cq.data === "dec") {
           newText = `❌ <b>Вы отказались от оффера.</b>`;
-          // Кнопок нет, так как newMarkup пустой
         }
 
-        await callApi("sendMessage", { 
-          chat_id: chatId, 
-          text: newText, 
-          parse_mode: "HTML",
-          reply_markup: newMarkup
-        });
+        // 2. СНАЧАЛА ОТПРАВЛЯЕМ НОВОЕ СООБЩЕНИЕ
+        try {
+          await callApi("sendMessage", { 
+            chat_id: chatId, 
+            text: newText, 
+            parse_mode: "HTML",
+            reply_markup: newMarkup
+          });
+
+          // 3. ТОЛЬКО ПОТОМ УДАЛЯЕМ СТАРОЕ
+          try {
+            await callApi("deleteMessage", { chat_id: chatId, message_id: messageId });
+          } catch (deleteError) {
+            console.error("Не удалось удалить старое сообщение:", deleteError.message);
+          }
+
+        } catch (sendError) {
+          console.error("Ошибка при отправке нового сообщения:", sendError.message);
+        }
       }
 
       return new Response("OK", { status: 200 });
