@@ -7,7 +7,8 @@ const ALLOWED_IDS = [
   5151757168, 
   9021098137, 
   1290278554, 
-  883619484
+  883619484,
+  7903610791
 ];
 const ALLOWED_USERNAMES = ["nogannopervi"];
 
