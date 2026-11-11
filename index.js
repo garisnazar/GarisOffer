@@ -89,7 +89,6 @@ export default {
       if (update.callback_query) {
         const cq = update.callback_query;
         
-        // Получаем данные того, кто НАЖАЛ на кнопку
         const buyer = cq.from;
         let buyerName = buyer.first_name || "";
         if (buyer.last_name) buyerName += " " + buyer.last_name;
@@ -97,7 +96,7 @@ export default {
 
         let buyerLink = buyer.username ? "https://t.me/" + buyer.username : `tg://user?id=${buyer.id}`;
 
-        // 1. ОТВЕЧАЕМ НА КНОПКУ (Красивое всплывающее окно)
+        // 1. МГНОВЕННО ОТВЕЧАЕМ (убираем загрузку)
         if (cq.data === "acc") {
           await callApi("answerCallbackQuery", { 
             callback_query_id: cq.id, 
@@ -116,7 +115,6 @@ export default {
         const hasCaption = !!cq.message.caption;
         const messageText = cq.message.text || cq.message.caption || "";
 
-        // Ищем сумму, чтобы подставить в текст
         const amountMatch = messageText.match(/(\d+)\s*⭐/);
         const amount = amountMatch ? amountMatch[1] : "указанную сумму";
 
@@ -133,15 +131,21 @@ export default {
         }
 
         try {
+          // Пытаемся изменить сообщение (с отключенным превью)
           if (hasCaption) {
             await callApi("editMessageCaption", { chat_id: chatId, message_id: messageId, caption: newText, parse_mode: "HTML", reply_markup: newMarkup });
           } else {
-            await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
+            await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: newMarkup, disable_web_page_preview: true });
           }
         } catch (e) {
-          // Если Telegram запретил менять это сообщение, покажем ошибку
-          console.error("Ошибка при изменении:", e.message);
-          await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: "Ошибка: " + e.message, show_alert: true });
+          console.error("Ошибка Telegram при изменении:", e.message);
+          // ЕСЛИ TELEGRAM ЗАПРЕТИЛ МЕНЯТЬ СТАРОЕ СООБЩЕНИЕ, ОТПРАВЛЯЕМ НОВОЕ
+          await callApi("sendMessage", { 
+            chat_id: chatId, 
+            text: newText, 
+            parse_mode: "HTML",
+            reply_markup: newMarkup
+          });
         }
       }
 
@@ -163,7 +167,7 @@ async function callApi(method, body) {
     });
     const data = await response.json();
     if (!data.ok) {
-      throw new Error(data.description); // Вызываем ошибку, если Telegram ответил отказом
+      throw new Error(data.description);
     }
     return data;
   } catch (e) {
