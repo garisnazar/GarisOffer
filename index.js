@@ -1,5 +1,5 @@
 const ADMIN_ID = 5151757168; // Ваш ID
-const BOT_TOKEN = "9231998177:AAEFkqiFf9ihgkzjBk-DJJSoeyh149pUmew"; // ВАШ ТОКЕН
+const BOT_TOKEN = "9231998177:AAGBygPUUaRla7FJujix4bE9cpYWcg4U3w0"; // ВАШ ТОКЕН
 
 // ==========================================
 // БЕЛЫЙ СПИСОК (КОМУ МОЖНО ПОЛЬЗОВАТЬСЯ)
