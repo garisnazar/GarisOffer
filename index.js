@@ -52,7 +52,6 @@ export default {
 
         if (!isAdmin && !isAllowed) return new Response("OK", { status: 200 });
 
-        // Очистка текста от скрытых символов (защита от iPhone)
         let textQuery = iq.query.replace(/[\u00A0\u200B\u202F]/g, ' ').replace(/https?:\/\//gi, '').trim().toLowerCase(); 
         
         const allNums = textQuery.match(/\d+/g); 
@@ -69,7 +68,6 @@ export default {
             }
         }
 
-        // ОПРЕДЕЛЯЕМ ВАЛЮТУ
         let currencyType = "stars";
         let currencyDisplay = "⭐ Stars";
         if (textQuery.includes("gram") || textQuery.includes("ton")) {
@@ -91,7 +89,6 @@ export default {
           input_message_content: { message_text: text, parse_mode: "HTML" },
           reply_markup: {
             inline_keyboard: [
-              // ЗАШИВАЕМ СУММУ И ВАЛЮТУ В КНОПКУ (безопасно, до 64 байт)
               [{ text: "✅ Принять", callback_data: `acc|${amount}|${currencyType}` }],
               [{ text: "❌ Отклонить", callback_data: `dec|${amount}|${currencyType}` }]
             ]
@@ -107,7 +104,6 @@ export default {
         
         if (cq.data.startsWith("acc") || cq.data.startsWith("dec")) {
             
-          // ДОСТАЕМ ДАННЫЕ ИЗ КНОПКИ
           const dataParts = cq.data.split("|");
           const action = dataParts[0];
           const amount = dataParts[1] || "0";
@@ -119,7 +115,8 @@ export default {
           if (buyer.last_name) buyerName += " " + buyer.last_name;
           if (!buyerName) buyerName = buyer.username ? "@" + buyer.username : "Пользователь";
 
-          let buyerLink = buyer.username ? "https://t.me/" + buyer.username : "https://t.me/gwrex";
+          // ИСПРАВЛЕНИЕ: Если нет юзернейма, ведем на ID профиля, а не на gwrex
+          let buyerLink = buyer.username ? "https://t.me/" + buyer.username : `tg://user?id=${buyer.id}`;
 
           let newText = "";
           let newMarkup = { inline_keyboard: [] };
@@ -140,7 +137,6 @@ export default {
             newText = `❌ <b>Вы отказались от оффера.</b>`;
           }
 
-          // МЕНЯЕМ СООБЩЕНИЕ (БЕЗОПАСНО)
           if (cq.inline_message_id) {
             try {
               if (cq.message && cq.message.caption !== undefined) {
