@@ -89,6 +89,7 @@ export default {
       if (update.callback_query) {
         const cq = update.callback_query;
         
+        // Получаем данные того, кто НАЖАЛ на кнопку
         const buyer = cq.from;
         let buyerName = buyer.first_name || "";
         if (buyer.last_name) buyerName += " " + buyer.last_name;
@@ -96,7 +97,7 @@ export default {
 
         let buyerLink = buyer.username ? "https://t.me/" + buyer.username : `tg://user?id=${buyer.id}`;
 
-        // 1. МГНОВЕННО ОТВЕЧАЕМ (убираем загрузку)
+        // 1. МГНОВЕННО ОТВЕЧАЕМ (убираем загрузку и показываем окошко)
         if (cq.data === "acc") {
           await callApi("answerCallbackQuery", { 
             callback_query_id: cq.id, 
@@ -107,46 +108,43 @@ export default {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id });
         }
 
-        // 2. МЕНЯЕМ СООБЩЕНИЕ
         if (!cq.message) return new Response("OK", { status: 200 }); 
         
         const chatId = cq.message.chat.id;
         const messageId = cq.message.message_id;
-        const hasCaption = !!cq.message.caption;
         const messageText = cq.message.text || cq.message.caption || "";
 
+        // Ищем сумму, чтобы подставить в текст
         const amountMatch = messageText.match(/(\d+)\s*⭐/);
         const amount = amountMatch ? amountMatch[1] : "указанную сумму";
 
+        // 2. УДАЛЯЕМ СТАРОЕ СООБЩЕНИЕ
+        try {
+          await callApi("deleteMessage", { chat_id: chatId, message_id: messageId });
+        } catch (e) {
+          console.error("Не удалось удалить сообщение:", e.message);
+        }
+
+        // 3. ОТПРАВЛЯЕМ НОВОЕ СООБЩЕНИЕ
         let newText = "";
         let newMarkup = { inline_keyboard: [] };
 
         if (cq.data === "acc") {
-          newText = `✅ <b>${buyerName}</b> принял оффер!\n\nПередайте подарок, чтобы ${amount} ⭐️ Stars пришли`;
+          newText = `✅ <b>Подарок продан!</b>\n\nПередайте его покупателю <b>${buyerName}</b>, чтобы получить ${amount} ⭐️ Stars.`;
           newMarkup = { 
-            inline_keyboard: [[{ text: "Передать NFT ↗", url: buyerLink }]] 
+            inline_keyboard: [[{ text: "🎁 Передать подарок", url: buyerLink }]] 
           };
         } else if (cq.data === "dec") {
-          newText = `❌ <b>${buyerName}</b> отклонил оффер`;
+          newText = `❌ <b>Вы отказались от оффера.</b>`;
+          // Кнопок нет, так как newMarkup пустой
         }
 
-        try {
-          // Пытаемся изменить сообщение (с отключенным превью)
-          if (hasCaption) {
-            await callApi("editMessageCaption", { chat_id: chatId, message_id: messageId, caption: newText, parse_mode: "HTML", reply_markup: newMarkup });
-          } else {
-            await callApi("editMessageText", { chat_id: chatId, message_id: messageId, text: newText, parse_mode: "HTML", reply_markup: newMarkup, disable_web_page_preview: true });
-          }
-        } catch (e) {
-          console.error("Ошибка Telegram при изменении:", e.message);
-          // ЕСЛИ TELEGRAM ЗАПРЕТИЛ МЕНЯТЬ СТАРОЕ СООБЩЕНИЕ, ОТПРАВЛЯЕМ НОВОЕ
-          await callApi("sendMessage", { 
-            chat_id: chatId, 
-            text: newText, 
-            parse_mode: "HTML",
-            reply_markup: newMarkup
-          });
-        }
+        await callApi("sendMessage", { 
+          chat_id: chatId, 
+          text: newText, 
+          parse_mode: "HTML",
+          reply_markup: newMarkup
+        });
       }
 
       return new Response("OK", { status: 200 });
