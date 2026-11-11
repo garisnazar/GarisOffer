@@ -2,7 +2,7 @@ const ADMIN_ID = 5151757168;
 const BOT_TOKEN = "9231998177:AAGBygPUUaRla7FJujix4bE9cpYWcg4U3w0"; // ВСТАВЬ СВОЙ ТОКЕН
 const WEBHOOK_SECRET = "GarisOffer9231998"; // ВСТАВЬ СВОЙ СЕКРЕТ
 
-const ALLOWED_IDS = [5151757168,9021098137];
+const ALLOWED_IDS = [5151757168,9021098137, 1290278554];
 const ALLOWED_USERNAMES = ["nogannopervi"];
 
 export default {
