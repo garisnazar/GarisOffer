@@ -1,5 +1,5 @@
 const ADMIN_ID = 5151757168; 
-const BOT_TOKEN = "9231998177:AAGBygPUUaRla7FJujix4bE9cpYWcg4U3w0"; // ВСТАВЬ СВОЙ ТОКЕН
+const BOT_TOKEN = "9231998177:AAEG-VIcnfJv6cFaVDB0YnM2yFcsnd6TgFM"; // ВСТАВЬ СВОЙ ТОКЕН
 const WEBHOOK_SECRET = "GarisOffer9231998"; // ТВОЙ СЕКРЕТ
 
 const ALLOWED_IDS = [
