@@ -1,19 +1,22 @@
 const ADMIN_ID = 5151757168; 
-const BOT_TOKEN = "9231998177:AAEG-VIcnfJv6cFaVDB0YnM2yFcsnd6TgFM"; // ВСТАВЬ СВОЙ ТОКЕН
-const WEBHOOK_SECRET = "GarisOffer9231998"; // ТВОЙ СЕКРЕТ
+// Убрали хардкод токена. Теперь он берётся из переменных окружения Cloudflare:
+// const BOT_TOKEN = "ТУТ_ТВОЙ_НОВЫЙ_ТОКЕН"; // <-- ЭТОЙ СТРОКИ БОЛЬШЕ НЕТ
 
-const ALLOWED_IDS = [
-  5151757168, 
-  9021098137, 
-  1290278554, 
-  883619484,
-  7903610791,
-  1976216049
-];
+const WEBHOOK_SECRET = "GarisOffer9231998"; 
+
+const ALLOWED_IDS = [5151757168, 9021098137, 1290278554, 883619484, 7903610791];
 const ALLOWED_USERNAMES = ["nogannopervi"];
 
 export default {
-  async fetch(request, env, ctx) {
+  async fetch(request, env, ctx) { // <-- env приходит сюда
+    // Теперь токен берётся из переменной окружения BOT_TOKEN
+    const BOT_TOKEN = env.BOT_TOKEN; 
+
+    if (!BOT_TOKEN) {
+      console.error("КРИТИЧЕСКАЯ ОШИБКА: Переменная BOT_TOKEN не задана в Cloudflare!");
+      return new Response("Bot token is not configured", { status: 500 });
+    }
+
     const secretHeader = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
     if (secretHeader !== WEBHOOK_SECRET) {
       return new Response("Forbidden", { status: 403 });
@@ -39,7 +42,7 @@ export default {
         } else {
           text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n👑 <b>Владелец:</b> @gwrex\n\nОтправь оффер в Stars:\n<code>@GarisOfferBot t.me/nft/LolPop-348029 450 stars</code>\n\nОтправь оффер в Gram:\n<code>@GarisOfferBot t.me/nft/PrettyPosy-5375 500 gram</code>`;
         }
-        await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" });
+        await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" }, BOT_TOKEN);
       }
 
       // --- INLINE (Создание офера) ---
@@ -96,7 +99,7 @@ export default {
           }
         }];
 
-        await callApi("answerInlineQuery", { inline_query_id: iq.id, results: results, cache_time: 0 });
+        await callApi("answerInlineQuery", { inline_query_id: iq.id, results: results, cache_time: 0 }, BOT_TOKEN);
       }
 
       // --- КНОПКИ ---
@@ -116,7 +119,6 @@ export default {
           if (buyer.last_name) buyerName += " " + buyer.last_name;
           if (!buyerName) buyerName = buyer.username ? "@" + buyer.username : "Пользователь";
 
-          // ИСПРАВЛЕНИЕ: Если нет юзернейма, ведем на ID профиля, а не на gwrex
           let buyerLink = buyer.username ? "https://t.me/" + buyer.username : `tg://user?id=${buyer.id}`;
 
           let newText = "";
@@ -127,23 +129,23 @@ export default {
               callback_query_id: cq.id, 
               text: `Предложение успешно принято ✅\n\nПередайте подарок, чтобы ${amount} ${displayCurrency} пришли`, 
               show_alert: true 
-            });
+            }, BOT_TOKEN);
             
             newText = `✅ <b>Подарок продан!</b>\n\nПередайте его покупателю <b>${buyerName}</b>, чтобы получить ${amount} ${displayCurrency}.`;
             newMarkup = { 
               inline_keyboard: [[{ text: "🎁 Передать подарок", url: buyerLink }]] 
             };
           } else {
-            await callApi("answerCallbackQuery", { callback_query_id: cq.id });
+            await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
             newText = `❌ <b>Вы отказались от оффера.</b>`;
           }
 
           if (cq.inline_message_id) {
             try {
               if (cq.message && cq.message.caption !== undefined) {
-                await callApi("editMessageCaption", { inline_message_id: cq.inline_message_id, caption: newText, parse_mode: "HTML", reply_markup: newMarkup });
+                await callApi("editMessageCaption", { inline_message_id: cq.inline_message_id, caption: newText, parse_mode: "HTML", reply_markup: newMarkup }, BOT_TOKEN);
               } else {
-                await callApi("editMessageText", { inline_message_id: cq.inline_message_id, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
+                await callApi("editMessageText", { inline_message_id: cq.inline_message_id, text: newText, parse_mode: "HTML", reply_markup: newMarkup }, BOT_TOKEN);
               }
             } catch (err) { console.error("Ошибка при редактировании:", err.message); }
           } 
@@ -151,8 +153,8 @@ export default {
             const chatId = cq.message.chat.id;
             const messageId = cq.message.message_id;
             try {
-              await callApi("sendMessage", { chat_id: chatId, text: newText, parse_mode: "HTML", reply_markup: newMarkup });
-              try { await callApi("deleteMessage", { chat_id: chatId, message_id: messageId }); } catch (e) {}
+              await callApi("sendMessage", { chat_id: chatId, text: newText, parse_mode: "HTML", reply_markup: newMarkup }, BOT_TOKEN);
+              try { await callApi("deleteMessage", { chat_id: chatId, message_id: messageId }, BOT_TOKEN); } catch (e) {}
             } catch (err) { console.error("Ошибка отправки:", err.message); }
           }
         }
@@ -166,8 +168,9 @@ export default {
   }
 };
 
-async function callApi(method, body) {
-  const url = `https://api.telegram.org/bot${BOT_TOKEN}/${method}`;
+// Теперь функция callApi принимает токен как аргумент
+async function callApi(method, body, token) {
+  const url = `https://api.telegram.org/bot${token}/${method}`;
   try {
     const response = await fetch(url, {
       method: "POST",
