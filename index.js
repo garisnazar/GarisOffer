@@ -35,7 +35,6 @@ export default {
         const chatId = update.message.chat.id;
         const userId = update.message.from.id;
 
-        // ИНСТРУКЦИЯ ТЕПЕРЬ ПРИХОДИТ ВСЕМ
         const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите продавца и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n⏳ Ограниченное время на подтверждение, таймер указан в сообщении с оффером.\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
         
         const startMarkup = {
@@ -51,11 +50,9 @@ export default {
         const userId = iq.from.id;
         const username = iq.from.username ? iq.from.username.toLowerCase() : "";
         
-        // ПРОВЕРКА ДОСТУПА ДЛЯ СОЗДАНИЯ ОФФЕРОВ ОСТАЕТСЯ!
         const isAdmin = userId === ADMIN_ID;
         const isAllowed = ALLOWED_IDS.includes(userId) || (username && ALLOWED_USERNAMES.includes(username));
 
-        // Если человека нет в списке, он не сможет создать оффер
         if (!isAdmin && !isAllowed) return new Response("OK", { status: 200 });
 
         let textQuery = iq.query.replace(/[\u00A0\u200B\u202F]/g, ' ').replace(/https?:\/\//gi, '').trim().toLowerCase(); 
@@ -74,11 +71,16 @@ export default {
             }
         }
 
+        // ОПРЕДЕЛЯЕМ ВАЛЮТУ (Stars, Gram или Rub)
         let currencyType = "stars";
         let currencyDisplay = "⭐ Stars";
+        
         if (textQuery.includes("gram") || textQuery.includes("ton")) {
             currencyType = "gram";
             currencyDisplay = "💎 Gram";
+        } else if (textQuery.includes("rub") || textQuery.includes("руб")) {
+            currencyType = "rub";
+            currencyDisplay = "₽ Rub";
         }
 
         let senderName = iq.from.first_name || "";
@@ -147,7 +149,11 @@ export default {
           const currencyType = dataParts[2] || "stars";
           const sellerUsername = dataParts[3] || "gwrex"; 
           const giftLink = dataParts[4] || ""; 
-          const displayCurrency = currencyType === "gram" ? "💎 Gram" : "⭐ Stars";
+          
+          // ОПРЕДЕЛЯЕМ ОТОБРАЖЕНИЕ ВАЛЮТЫ ПРИ ПРИНЯТИИ
+          let displayCurrency = "⭐ Stars";
+          if (currencyType === "gram") displayCurrency = "💎 Gram";
+          if (currencyType === "rub") displayCurrency = "₽ Rub";
 
           const buyer = cq.from;
           let buyerName = buyer.first_name || "";
