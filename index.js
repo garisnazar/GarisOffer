@@ -1,15 +1,12 @@
 const ADMIN_ID = 5151757168; 
-// Убрали хардкод токена. Теперь он берётся из переменных окружения Cloudflare:
-// const BOT_TOKEN = "ТУТ_ТВОЙ_НОВЫЙ_ТОКЕН"; // <-- ЭТОЙ СТРОКИ БОЛЬШЕ НЕТ
 
 const WEBHOOK_SECRET = "GarisOffer9231998"; 
 
-const ALLOWED_IDS = [5151757168, 9021098137, 1290278554, 883619484, 7903610791,1976216049];
+const ALLOWED_IDS = [5151757168, 9021098137, 1290278554, 883619484, 7903610791, 1976216049];
 const ALLOWED_USERNAMES = ["nogannopervi"];
 
 export default {
-  async fetch(request, env, ctx) { // <-- env приходит сюда
-    // Теперь токен берётся из переменной окружения BOT_TOKEN
+  async fetch(request, env, ctx) {
     const BOT_TOKEN = env.BOT_TOKEN; 
 
     if (!BOT_TOKEN) {
@@ -119,7 +116,18 @@ export default {
           if (buyer.last_name) buyerName += " " + buyer.last_name;
           if (!buyerName) buyerName = buyer.username ? "@" + buyer.username : "Пользователь";
 
-          let buyerLink = buyer.username ? "https://t.me/" + buyer.username : `tg://user?id=${buyer.id}`;
+          // УМНАЯ ЛОГИКА ДЛЯ КНОПКИ И ТЕКСТА
+          let buyerLink = "https://t.me/gwrex"; // Резервная ссылка на тебя
+          let buyerInfoText = `<b>${buyerName}</b>`; // Просто имя
+
+          if (buyer.username) {
+            // Если есть ник - ссылка на него, в тексте пишем ник
+            buyerLink = "https://t.me/" + buyer.username;
+            buyerInfoText = `<b>${buyerName}</b> (@${buyer.username})`;
+          } else {
+            // Если ника нет - в тексте пишем ID, чтобы ты мог найти его вручную
+            buyerInfoText = `<b>${buyerName}</b> (ID: <code>${buyer.id}</code>)`;
+          }
 
           let newText = "";
           let newMarkup = { inline_keyboard: [] };
@@ -131,7 +139,8 @@ export default {
               show_alert: true 
             }, BOT_TOKEN);
             
-            newText = `✅ <b>Подарок продан!</b>\n\nПередайте его покупателю <b>${buyerName}</b>, чтобы получить ${amount} ${displayCurrency}.`;
+            // Используем умный текст
+            newText = `✅ <b>Подарок продан!</b>\n\nПередайте его покупателю ${buyerInfoText}, чтобы получить ${amount} ${displayCurrency}.`;
             newMarkup = { 
               inline_keyboard: [[{ text: "🎁 Передать подарок", url: buyerLink }]] 
             };
@@ -168,7 +177,6 @@ export default {
   }
 };
 
-// Теперь функция callApi принимает токен как аргумент
 async function callApi(method, body, token) {
   const url = `https://api.telegram.org/bot${token}/${method}`;
   try {
