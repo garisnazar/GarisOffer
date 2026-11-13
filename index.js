@@ -7,7 +7,6 @@ const ALLOWED_IDS = [
   1290278554, 
   883619484, 
   7903610791,
-  8614618729,
   8532075411 // Твой новый ID добавлен
 ];
 const ALLOWED_USERNAMES = ["nogannopervi"];
