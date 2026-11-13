@@ -21,7 +21,7 @@ export default {
       const update = await request.json();
 
       // ==========================================
-      // КОМАНДЫ /add и /remove (ТОЛЬКО ДЛЯ ГЛАВНОГО АДМИНА)
+      // КОМАНДЫ /add, /remove и /remove all (ТОЛЬКО ДЛЯ ГЛАВНОГО АДМИНА)
       // ==========================================
       if (update.message && (update.message.text.startsWith("/add ") || update.message.text.startsWith("/remove "))) {
         const senderId = update.message.from.id;
@@ -46,6 +46,31 @@ export default {
             return new Response("OK", { status: 200 });
         }
 
+        // --- ОБРАБОТКА /remove all ---
+        if (command === "/remove" && targetUser.toLowerCase() === "all") {
+            try {
+                // Получаем список всех ключей (с пагинацией, так как KV лимитирован)
+                let cursor = undefined;
+                let keysToDelete = [];
+                do {
+                    const list = await kv.list({ cursor });
+                    keysToDelete.push(...list.keys.map(k => k.name));
+                    cursor = list.cursor;
+                } while (cursor);
+
+                // Удаляем все найденные ключи
+                for (const key of keysToDelete) {
+                    await kv.delete(key);
+                }
+
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 <b>База доступа полностью очищена!</b>\nУдалено записей: ${keysToDelete.length}.`, parse_mode: "HTML" }, BOT_TOKEN);
+            } catch (err) {
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `❌ Ошибка при очистке базы: ${err.message}` }, BOT_TOKEN);
+            }
+            return new Response("OK", { status: 200 });
+        }
+
+        // --- ОБРАБОТКА /add и /remove для одного пользователя ---
         if (command === "/add") {
             if (targetUser.startsWith("@")) {
                 const uname = targetUser.slice(1).toLowerCase();
@@ -73,17 +98,12 @@ export default {
       // ПРОВЕРКА ДОСТУПА (ТОЛЬКО ЧЕРЕЗ БАЗУ KV)
       // ==========================================
       async function checkAccess(userId, username) {
-          // Твой основной аккаунт всегда имеет доступ
           if (userId === ADMIN_ID) return true; 
-          
-          // Если базы нет - доступ только у тебя
           if (!kv) return false; 
           
-          // Ищем в базе по ID
           const byId = await kv.get(`allowed_id:${userId}`);
           if (byId) return true;
           
-          // Ищем в базе по юзернейму
           if (username) {
               const byName = await kv.get(`allowed_username:${username.toLowerCase()}`);
               if (byName) return true;
@@ -111,7 +131,6 @@ export default {
         const userId = iq.from.id;
         const username = iq.from.username || "";
 
-        // Строгая проверка: если нет в базе, бот ничего не покажет
         const hasAccess = await checkAccess(userId, username);
         if (!hasAccess) return new Response("OK", { status: 200 });
 
