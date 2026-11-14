@@ -123,21 +123,39 @@ export default {
             return new Response("OK", { status: 200 });
         }
 
+        // --- ИСПРАВЛЕННАЯ КОМАНДА /remove all ---
         if (command === "/remove" && targetUser.toLowerCase() === "all") {
             try {
                 let cursor = undefined;
                 let keysToDelete = [];
-                do {
-                    const list = await kv.list({ cursor });
-                    keysToDelete.push(...list.keys.filter(k => k.name.startsWith("allowed_")).map(k => k.name));
-                    cursor = list.cursor;
-                } while (cursor);
+                
+                // Делаем 3 прохода по базе, чтобы выловить все ключи (защита от лагов KV)
+                for (let i = 0; i < 3; i++) {
+                    cursor = undefined;
+                    do {
+                        const list = await kv.list({ cursor });
+                        for (const key of list.keys) {
+                            // Удаляем только доступы (allowed_)
+                            if (key.name.startsWith("allowed_")) {
+                                // НЕ удаляем главных админов!
+                                if (key.name === `allowed_id:${ADMIN_ID_1}` || key.name === `allowed_id:${ADMIN_ID_2}`) continue;
+                                if (key.name === `allowed_username:gwrex`) continue; // Защита твоего ника
+
+                                keysToDelete.push(key.name);
+                            }
+                        }
+                        cursor = list.cursor;
+                    } while (cursor);
+                }
+
+                // Убираем дубликаты
+                keysToDelete = [...new Set(keysToDelete)];
 
                 for (const key of keysToDelete) {
                     await kv.delete(key);
                 }
 
-                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 <b>Список доступа очищен!</b>\nУдалено: ${keysToDelete.length}.`, parse_mode: "HTML" }, BOT_TOKEN);
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 <b>Список доступа очищен!</b>\nУдалено записей: ${keysToDelete.length}.\n\n👑 Главные админы сохранены.`, parse_mode: "HTML" }, BOT_TOKEN);
             } catch (err) {
                 await callApi("sendMessage", { chat_id: update.message.chat.id, text: `❌ Ошибка: ${err.message}` }, BOT_TOKEN);
             }
@@ -171,7 +189,6 @@ export default {
       // ПРОВЕРКА ДОСТУПА
       // ==========================================
       async function checkAccess(userId, username) {
-          // Оба админа всегда имеют доступ
           if (userId === ADMIN_ID_1 || userId === ADMIN_ID_2) return true; 
           if (!kv) return false; 
           
@@ -191,7 +208,6 @@ export default {
         const userId = update.message.from.id;
         const username = update.message.from.username;
 
-        // СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЯ В БАЗУ (чтобы считать всех)
         if (kv) {
             await kv.put(`user:${userId}`, username || "no_username");
         }
@@ -213,7 +229,6 @@ export default {
         const userId = iq.from.id;
         const username = iq.from.username || "";
 
-        // Сохраняем и тех, кто создает оффер
         if (kv) {
             await kv.put(`user:${userId}`, username || "no_username");
         }
