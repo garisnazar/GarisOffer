@@ -21,12 +21,72 @@ export default {
       const update = await request.json();
 
       // ==========================================
-      // КОМАНДЫ /add, /remove и /remove all (ТОЛЬКО ДЛЯ ГЛАВНОГО АДМИНА)
+      // КОМАНДА /stats (ПОКАЗЫВАЕТ СПИСОК ЛЮДЕЙ)
+      // ==========================================
+      if (update.message && update.message.text === "/stats") {
+        const senderId = update.message.from.id;
+        const chatId = update.message.chat.id;
+
+        if (senderId !== ADMIN_ID) {
+            await callApi("sendMessage", { chat_id: chatId, text: "⛔ У вас нет прав на эту команду." }, BOT_TOKEN);
+            return new Response("OK", { status: 200 });
+        }
+
+        if (!kv) {
+            await callApi("sendMessage", { chat_id: chatId, text: "❌ База данных KV не подключена." }, BOT_TOKEN);
+            return new Response("OK", { status: 200 });
+        }
+
+        try {
+            let cursor = undefined;
+            let idsList = [];
+            let usernamesList = [];
+
+            // Собираем все ключи
+            do {
+                const list = await kv.list({ cursor });
+                for (const key of list.keys) {
+                    if (key.name.startsWith("allowed_id:")) {
+                        idsList.push(key.name.replace("allowed_id:", ""));
+                    }
+                    if (key.name.startsWith("allowed_username:")) {
+                        usernamesList.push(key.name.replace("allowed_username:", ""));
+                    }
+                }
+                cursor = list.cursor;
+            } while (cursor);
+
+            let statsText = `📊 <b>Список доступа:</b>\n\n`;
+            
+            statsText += `👤 <b>По ID (${idsList.length}):</b>\n`;
+            if (idsList.length > 0) {
+                statsText += idsList.map(id => `<code>${id}</code>`).join(", ") + "\n\n";
+            } else {
+                statsText += `— пусто —\n\n`;
+            }
+
+            statsText += `🔗 <b>По @username (${usernamesList.length}):</b>\n`;
+            if (usernamesList.length > 0) {
+                statsText += usernamesList.map(uname => `@${uname}`).join(", ") + "\n\n";
+            } else {
+                statsText += `— пусто —\n\n`;
+            }
+
+            statsText += `👑 Главный админ: <code>${ADMIN_ID}</code>`;
+            
+            await callApi("sendMessage", { chat_id: chatId, text: statsText, parse_mode: "HTML" }, BOT_TOKEN);
+        } catch (err) {
+            await callApi("sendMessage", { chat_id: chatId, text: `❌ Ошибка при получении статистики: ${err.message}` }, BOT_TOKEN);
+        }
+        return new Response("OK", { status: 200 });
+      }
+
+      // ==========================================
+      // КОМАНДЫ /add, /remove и /remove all
       // ==========================================
       if (update.message && (update.message.text.startsWith("/add ") || update.message.text.startsWith("/remove "))) {
         const senderId = update.message.from.id;
         
-        // Проверка: только твой основной аккаунт
         if (senderId !== ADMIN_ID) {
             await callApi("sendMessage", { chat_id: update.message.chat.id, text: "⛔ У вас нет прав на эту команду." }, BOT_TOKEN);
             return new Response("OK", { status: 200 });
@@ -46,10 +106,9 @@ export default {
             return new Response("OK", { status: 200 });
         }
 
-        // --- ОБРАБОТКА /remove all ---
+        // --- /remove all ---
         if (command === "/remove" && targetUser.toLowerCase() === "all") {
             try {
-                // Получаем список всех ключей (с пагинацией, так как KV лимитирован)
                 let cursor = undefined;
                 let keysToDelete = [];
                 do {
@@ -58,7 +117,6 @@ export default {
                     cursor = list.cursor;
                 } while (cursor);
 
-                // Удаляем все найденные ключи
                 for (const key of keysToDelete) {
                     await kv.delete(key);
                 }
@@ -70,7 +128,7 @@ export default {
             return new Response("OK", { status: 200 });
         }
 
-        // --- ОБРАБОТКА /add и /remove для одного пользователя ---
+        // --- /add и /remove ---
         if (command === "/add") {
             if (targetUser.startsWith("@")) {
                 const uname = targetUser.slice(1).toLowerCase();
@@ -95,7 +153,7 @@ export default {
       }
 
       // ==========================================
-      // ПРОВЕРКА ДОСТУПА (ТОЛЬКО ЧЕРЕЗ БАЗУ KV)
+      // ПРОВЕРКА ДОСТУПА
       // ==========================================
       async function checkAccess(userId, username) {
           if (userId === ADMIN_ID) return true; 
@@ -125,7 +183,7 @@ export default {
         await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
       }
 
-      // --- INLINE (Создание офера) ---
+      // --- INLINE ---
       if (update.inline_query) {
         const iq = update.inline_query;
         const userId = iq.from.id;
