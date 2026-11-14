@@ -1,5 +1,6 @@
-const ADMIN_ID = 5151757168; // Твой основной ID (единственный админ)
-const WEBHOOK_SECRET = "GarisOffer9231998"; 
+const ADMIN_ID_1 = 5151757168; // Твой основной ID
+const ADMIN_ID_2 = 7423713851; // Твой твинк (тоже будет админом)
+const WEBHOOK_SECRET = "GarisOffer9231998";  
 
 export default {
   async fetch(request, env, ctx) {
