@@ -1,6 +1,6 @@
 const ADMIN_ID_1 = 5151757168; // Твой основной ID
-const ADMIN_ID_2 = 7423713851; // Твой твинк (тоже будет админом)
-const WEBHOOK_SECRET = "GarisOffer9231998";  
+const ADMIN_ID_2 = 7423713851; // Твой твинк (тоже админ)
+const WEBHOOK_SECRET = "GarisOffer9231998"; 
 
 export default {
   async fetch(request, env, ctx) {
@@ -22,13 +22,30 @@ export default {
       const update = await request.json();
 
       // ==========================================
-      // КОМАНДА /stats (ПОКАЗЫВАЕТ СПИСОК ЛЮДЕЙ)
+      // ФУНКЦИЯ ПОДСЧЕТА ВСЕХ ПОЛЬЗОВАТЕЛЕЙ (ДЛЯ /start)
+      // ==========================================
+      async function getTotalUsersCount() {
+          if (!kv) return 0;
+          let cursor = undefined;
+          let count = 0;
+          try {
+              do {
+                  const list = await kv.list({ cursor, prefix: "user:" });
+                  count += list.keys.length;
+                  cursor = list.cursor;
+              } while (cursor);
+          } catch(e) { console.error("Ошибка подсчета:", e); }
+          return count;
+      }
+
+      // ==========================================
+      // КОМАНДА /stats (СПИСОК ДОСТУПА)
       // ==========================================
       if (update.message && update.message.text === "/stats") {
         const senderId = update.message.from.id;
         const chatId = update.message.chat.id;
 
-        if (senderId !== ADMIN_ID) {
+        if (senderId !== ADMIN_ID_1 && senderId !== ADMIN_ID_2) {
             await callApi("sendMessage", { chat_id: chatId, text: "⛔ У вас нет прав на эту команду." }, BOT_TOKEN);
             return new Response("OK", { status: 200 });
         }
@@ -43,7 +60,6 @@ export default {
             let idsList = [];
             let usernamesList = [];
 
-            // Собираем все ключи
             do {
                 const list = await kv.list({ cursor });
                 for (const key of list.keys) {
@@ -73,7 +89,7 @@ export default {
                 statsText += `— пусто —\n\n`;
             }
 
-            statsText += `👑 Главный админ: <code>${ADMIN_ID}</code>`;
+            statsText += `👑 Главные админы: <code>${ADMIN_ID_1}</code>, <code>${ADMIN_ID_2}</code>`;
             
             await callApi("sendMessage", { chat_id: chatId, text: statsText, parse_mode: "HTML" }, BOT_TOKEN);
         } catch (err) {
@@ -88,7 +104,7 @@ export default {
       if (update.message && (update.message.text.startsWith("/add ") || update.message.text.startsWith("/remove "))) {
         const senderId = update.message.from.id;
         
-        if (senderId !== ADMIN_ID) {
+        if (senderId !== ADMIN_ID_1 && senderId !== ADMIN_ID_2) {
             await callApi("sendMessage", { chat_id: update.message.chat.id, text: "⛔ У вас нет прав на эту команду." }, BOT_TOKEN);
             return new Response("OK", { status: 200 });
         }
@@ -103,18 +119,17 @@ export default {
         const targetUser = args[1]; 
 
         if (!targetUser) {
-            await callApi("sendMessage", { chat_id: update.message.chat.id, text: "⚠️ Укажите ID или @username. Пример: <code>/add 123456789</code>", parse_mode: "HTML" }, BOT_TOKEN);
+            await callApi("sendMessage", { chat_id: update.message.chat.id, text: "⚠️ Укажите ID или @username.", parse_mode: "HTML" }, BOT_TOKEN);
             return new Response("OK", { status: 200 });
         }
 
-        // --- /remove all ---
         if (command === "/remove" && targetUser.toLowerCase() === "all") {
             try {
                 let cursor = undefined;
                 let keysToDelete = [];
                 do {
                     const list = await kv.list({ cursor });
-                    keysToDelete.push(...list.keys.map(k => k.name));
+                    keysToDelete.push(...list.keys.filter(k => k.name.startsWith("allowed_")).map(k => k.name));
                     cursor = list.cursor;
                 } while (cursor);
 
@@ -122,14 +137,13 @@ export default {
                     await kv.delete(key);
                 }
 
-                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 <b>База доступа полностью очищена!</b>\nУдалено записей: ${keysToDelete.length}.`, parse_mode: "HTML" }, BOT_TOKEN);
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 <b>Список доступа очищен!</b>\nУдалено: ${keysToDelete.length}.`, parse_mode: "HTML" }, BOT_TOKEN);
             } catch (err) {
-                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `❌ Ошибка при очистке базы: ${err.message}` }, BOT_TOKEN);
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `❌ Ошибка: ${err.message}` }, BOT_TOKEN);
             }
             return new Response("OK", { status: 200 });
         }
 
-        // --- /add и /remove ---
         if (command === "/add") {
             if (targetUser.startsWith("@")) {
                 const uname = targetUser.slice(1).toLowerCase();
@@ -157,7 +171,8 @@ export default {
       // ПРОВЕРКА ДОСТУПА
       // ==========================================
       async function checkAccess(userId, username) {
-          if (userId === ADMIN_ID) return true; 
+          // Оба админа всегда имеют доступ
+          if (userId === ADMIN_ID_1 || userId === ADMIN_ID_2) return true; 
           if (!kv) return false; 
           
           const byId = await kv.get(`allowed_id:${userId}`);
@@ -174,8 +189,16 @@ export default {
       if (update.message && update.message.text === "/start") {
         const chatId = update.message.chat.id;
         const userId = update.message.from.id;
+        const username = update.message.from.username;
 
-        const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите продавца и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n⏳ Ограниченное время на подтверждение, таймер указан в сообщении с оффером.\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
+        // СОХРАНЯЕМ ПОЛЬЗОВАТЕЛЯ В БАЗУ (чтобы считать всех)
+        if (kv) {
+            await kv.put(`user:${userId}`, username || "no_username");
+        }
+
+        const totalUsers = await getTotalUsersCount();
+
+        const startText = `👥 <b>Всего пользователей в боте:</b> ${totalUsers}\n\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите продавца и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n⏳ Ограниченное время на подтверждение, таймер указан в сообщении с оффером.\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
         
         const startMarkup = {
           inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]]
@@ -189,6 +212,11 @@ export default {
         const iq = update.inline_query;
         const userId = iq.from.id;
         const username = iq.from.username || "";
+
+        // Сохраняем и тех, кто создает оффер
+        if (kv) {
+            await kv.put(`user:${userId}`, username || "no_username");
+        }
 
         const hasAccess = await checkAccess(userId, username);
         if (!hasAccess) return new Response("OK", { status: 200 });
@@ -247,7 +275,8 @@ export default {
         if (cq.data === "back_to_start") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
           const userId = cq.from.id;
-          const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите продавца и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n⏳ Ограниченное время на подтверждение, таймер указан в сообщении с оффером.\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
+          const totalUsers = await getTotalUsersCount();
+          const startText = `👥 <b>Всего пользователей в боте:</b> ${totalUsers}\n\n🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите продавца и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n⏳ Ограниченное время на подтверждение.\n\n💡 Подарок уже у вас.`;
           const startMarkup = { inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]] };
           try { await callApi("editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN); } catch (e) {}
         }
