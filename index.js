@@ -66,7 +66,7 @@ export default {
         if (parts.length < 5) {
              await callApi("sendMessage", { 
               chat_id: chatId, 
-              text: "❌ <b>Ошибка формата.</b>\n\nПравильный формат:\n<code>/BuyGift [ссылка] [цена] [валюта] @username</code>\n\nПример:\n<code>/BuyGift https://t.me/nft/LolPop-348029 450 Stars @username</code>", 
+              text: "❌ <b>Ошибка формата.</b>\n\nПравильный формат:\n<code>/BuyGift [ссылка] [цена] [валюта] @username</code>", 
               parse_mode: "HTML" 
             }, BOT_TOKEN);
             return new Response("OK", { status: 200 });
@@ -190,10 +190,10 @@ export default {
           await callApi("sendMessage", { chat_id: chatId, text: topupText, parse_mode: "HTML", reply_markup: topupMarkup }, BOT_TOKEN);
         }
 
-        // Инструкция как кидать офферы
+        // Инструкция как кидать офферы (ОБНОВЛЕНА)
         if (cq.data === "how_to_create") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
-          const instructionCreate = `📖 <b>Как создать оффер:</b>\n\nНапишите в любом чате команду:\n<code>/BuyGift [ссылка] [цена] [валюта] @username</code>\n\n<b>Пример:</b>\n<code>/BuyGift https://t.me/nft/LolPop-348029 450 Stars @username</code>\n\n<i>Обратите внимание: для создания оффера нужен положительный баланс бота.</i>`;
+          const instructionCreate = `📖 <b>Как создать оффер:</b>\n\nНапишите в этом боте команду:\n<code>/BuyGift [ссылка] [цена] [валюта] @username</code>\n\n<i>Обратите внимание: для создания оффера нужен положительный баланс бота.</i>`;
           await callApi("sendMessage", { chat_id: chatId, text: instructionCreate, parse_mode: "HTML" }, BOT_TOKEN);
         }
 
@@ -297,7 +297,7 @@ export default {
       }
 
       // ==========================================
-      // ОПЛАТА И АДМИНКА (как было)
+      // ОПЛАТА
       // ==========================================
       if (update.pre_checkout_query) {
         await callApi("answerPreCheckoutQuery", { pre_checkout_query_id: update.pre_checkout_query.id, ok: true }, BOT_TOKEN);
@@ -307,6 +307,108 @@ export default {
         const chatId = update.message.chat.id;
         const amount = update.message.successful_payment.total_amount;
         await callApi("sendMessage", { chat_id: chatId, text: `✅ <b>Оплата прошла успешно!</b>\n\nВы пополнили баланс на ${amount} ⭐ Stars.\n\n<i>(Это тестовый режим, баланс не зачислен. Но вы можете продолжать пользоваться ботом!)</i>`, parse_mode: "HTML" }, BOT_TOKEN);
+      }
+
+      // ==========================================
+      // АДМИНСКИЕ КОМАНДЫ (/stats, /add, /remove)
+      // ==========================================
+      if (update.message && update.message.text === "/stats") {
+        const senderId = update.message.from.id;
+        const chatId = update.message.chat.id;
+
+        if (senderId !== ADMIN_ID_1 && senderId !== ADMIN_ID_2) {
+            await callApi("sendMessage", { chat_id: chatId, text: "⛔ У вас нет прав." }, BOT_TOKEN);
+            return new Response("OK", { status: 200 });
+        }
+
+        if (!kv) {
+            await callApi("sendMessage", { chat_id: chatId, text: "❌ База данных KV не подключена." }, BOT_TOKEN);
+            return new Response("OK", { status: 200 });
+        }
+
+        try {
+            let cursor = undefined;
+            let idsList = [];
+            let usernamesList = [];
+
+            do {
+                const list = await kv.list({ cursor });
+                for (const key of list.keys) {
+                    if (key.name.startsWith("allowed_id:")) idsList.push(key.name.replace("allowed_id:", ""));
+                    if (key.name.startsWith("allowed_username:")) usernamesList.push(key.name.replace("allowed_username:", ""));
+                }
+                cursor = list.cursor;
+            } while (cursor);
+
+            let statsText = `📊 <b>Список доступа:</b>\n\n👤 <b>По ID (${idsList.length}):</b>\n${idsList.length > 0 ? idsList.map(id => `<code>${id}</code>`).join(", ") : "— пусто —"}\n\n🔗 <b>По @username (${usernamesList.length}):</b>\n${usernamesList.length > 0 ? usernamesList.map(uname => `@${uname}`).join(", ") : "— пусто —"}\n\n👑 Главные админы: <code>${ADMIN_ID_1}</code>, <code>${ADMIN_ID_2}</code>`;
+            
+            await callApi("sendMessage", { chat_id: chatId, text: statsText, parse_mode: "HTML" }, BOT_TOKEN);
+        } catch (err) {
+            await callApi("sendMessage", { chat_id: chatId, text: `❌ Ошибка: ${err.message}` }, BOT_TOKEN);
+        }
+        return new Response("OK", { status: 200 });
+      }
+
+      if (update.message && (update.message.text.startsWith("/add ") || update.message.text.startsWith("/remove "))) {
+        const senderId = update.message.from.id;
+        if (senderId !== ADMIN_ID_1 && senderId !== ADMIN_ID_2) return new Response("OK", { status: 200 });
+        if (!kv) return new Response("OK", { status: 200 });
+
+        const args = update.message.text.split(" ");
+        const command = args[0]; 
+        const targetUser = args[1]; 
+
+        if (!targetUser) {
+            await callApi("sendMessage", { chat_id: update.message.chat.id, text: "⚠️ Укажите ID или @username.", parse_mode: "HTML" }, BOT_TOKEN);
+            return new Response("OK", { status: 200 });
+        }
+
+        if (command === "/remove" && targetUser.toLowerCase() === "all") {
+            try {
+                let cursor = undefined;
+                let keysToDelete = [];
+                for (let i = 0; i < 3; i++) {
+                    cursor = undefined;
+                    do {
+                        const list = await kv.list({ cursor });
+                        for (const key of list.keys) {
+                            if (key.name.startsWith("allowed_")) {
+                                if (key.name === `allowed_id:${ADMIN_ID_1}` || key.name === `allowed_id:${ADMIN_ID_2}`) continue;
+                                if (key.name === `allowed_username:gwrex`) continue;
+                                keysToDelete.push(key.name);
+                            }
+                        }
+                        cursor = list.cursor;
+                    } while (cursor);
+                }
+                keysToDelete = [...new Set(keysToDelete)];
+                for (const key of keysToDelete) await kv.delete(key);
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 <b>Список доступа очищен!</b>`, parse_mode: "HTML" }, BOT_TOKEN);
+            } catch (err) { console.error(err); }
+            return new Response("OK", { status: 200 });
+        }
+
+        if (command === "/add") {
+            if (targetUser.startsWith("@")) {
+                const uname = targetUser.slice(1).toLowerCase();
+                await kv.put(`allowed_username:${uname}`, "true");
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `✅ Пользователь <b>@${uname}</b> добавлен.` , parse_mode: "HTML"}, BOT_TOKEN);
+            } else {
+                await kv.put(`allowed_id:${targetUser}`, "true");
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `✅ Пользователь с ID <code>${targetUser}</code> добавлен.`, parse_mode: "HTML" }, BOT_TOKEN);
+            }
+        } 
+        else if (command === "/remove") {
+            if (targetUser.startsWith("@")) {
+                const uname = targetUser.slice(1).toLowerCase();
+                await kv.delete(`allowed_username:${uname}`);
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 Пользователь <b>@${uname}</b> удален.`, parse_mode: "HTML" }, BOT_TOKEN);
+            } else {
+                await kv.delete(`allowed_id:${targetUser}`);
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 Пользователь с ID <code>${targetUser}</code> удален.`, parse_mode: "HTML" }, BOT_TOKEN);
+            }
+        }
+        return new Response("OK", { status: 200 });
       }
 
       return new Response("OK", { status: 200 });
