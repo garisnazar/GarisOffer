@@ -18,6 +18,21 @@ export default {
       const update = await request.json();
 
       // ==========================================
+      // ФУНКЦИЯ ПРОВЕРКИ ДОСТУПА (вынесена наверх)
+      // ==========================================
+      async function checkAccess(userId, username) {
+          if (userId === ADMIN_ID_1 || userId === ADMIN_ID_2) return true; 
+          if (!kv) return false; 
+          const byId = await kv.get(`allowed_id:${userId}`);
+          if (byId) return true;
+          if (username) {
+              const byName = await kv.get(`allowed_username:${username.toLowerCase()}`);
+              if (byName) return true;
+          }
+          return false;
+      }
+
+      // ==========================================
       // КОМАНДА /start
       // ==========================================
       if (update.message && update.message.text === "/start") {
@@ -93,18 +108,6 @@ export default {
         const username = iq.from.username || "";
 
         if (kv) await kv.put(`user:${userId}`, username || "no_username");
-
-        async function checkAccess(uId, uname) {
-            if (uId === ADMIN_ID_1 || uId === ADMIN_ID_2) return true; 
-            if (!kv) return false; 
-            const byId = await kv.get(`allowed_id:${uId}`);
-            if (byId) return true;
-            if (uname) {
-                const byName = await kv.get(`allowed_username:${uname.toLowerCase()}`);
-                if (byName) return true;
-            }
-            return false;
-        }
 
         const hasAccess = await checkAccess(userId, username);
         if (!hasAccess) return new Response("OK", { status: 200 });
@@ -190,7 +193,7 @@ export default {
           await callApi("sendMessage", { chat_id: chatId, text: topupText, parse_mode: "HTML", reply_markup: topupMarkup }, BOT_TOKEN);
         }
 
-        // Инструкция как кидать офферы (ОБНОВЛЕНА)
+        // Инструкция как кидать офферы
         if (cq.data === "how_to_create") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
           const instructionCreate = `📖 <b>Как создать оффер:</b>\n\nНапишите в этом боте команду:\n<code>/BuyGift [ссылка] [цена] [валюта] @username</code>\n\n<i>Обратите внимание: для создания оффера нужен положительный баланс бота.</i>`;
