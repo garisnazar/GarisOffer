@@ -2,9 +2,6 @@ const ADMIN_ID_1 = 5151757168;
 const ADMIN_ID_2 = 7423713851; 
 const WEBHOOK_SECRET = "GarisOffer9231998"; 
 
-// Нативная эмодзи звезды Telegram (Премиум)
-const TG_STAR = '<tg-emoji emoji-id="5368324170671202286">⭐</tg-emoji>';
-
 export default {
   async fetch(request, env, ctx) {
     const BOT_TOKEN = env.BOT_TOKEN; 
@@ -21,7 +18,7 @@ export default {
       const update = await request.json();
 
       // ==========================================
-      // ПРОВЕРКА ДОСТУПА
+      // ФУНКЦИЯ ПРОВЕРКИ ДОСТУПА
       // ==========================================
       async function checkAccess(userId, username) {
           if (userId === ADMIN_ID_1 || userId === ADMIN_ID_2) return true; 
@@ -43,7 +40,7 @@ export default {
 
       if (msg && msg.text) {
         const text = msg.text.trim();
-        const chatId = msg.chat.id; // В бизнес-чатах это ID чата с клиентом
+        const chatId = msg.chat.id; 
         const userId = msg.from.id;
         const username = msg.from.username || "";
 
@@ -53,21 +50,14 @@ export default {
             const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Напишите <code>/buy [ссылка] [цена] stars</code>\n2. Бот пришлет предложение.\n3. Клиент нажимает «Принять».\n\n💡 Отправляйте команду прямо в этот чат.`;
             const startMarkup = { inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]] };
             
-            // Если это бизнес-чат, отправляем от имени бизнеса
             if (isBusiness) {
-                await callApi("sendMessage", { 
-                    business_connection_id: update.business_connection_id, 
-                    chat_id: chatId, 
-                    text: startText, 
-                    parse_mode: "HTML", 
-                    reply_markup: startMarkup 
-                }, BOT_TOKEN);
+                await callApi("sendMessage", { business_connection_id: update.business_connection_id, chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
             } else {
                 await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
             }
         }
 
-        // --- КОМАНДА /buy (Создание оффера через бизнес-бота) ---
+        // --- КОМАНДА /buy (Создание оффера) ---
         if (text.startsWith("/buy ")) {
             const parts = text.split(/\s+/);
             if (parts.length < 4) {
@@ -81,11 +71,9 @@ export default {
             let amount = parts[2];
             let lang = "ru";
             
-            // Проверка языка
             if (text.includes("eng") || text.includes("en ")) lang = "en";
             else if (text.includes("cn") || text.includes("中文")) lang = "cn";
 
-            // Парсим ссылку
             let giftLink = "";
             if (linkOrGift.includes("t.me")) {
                 giftLink = linkOrGift.startsWith("http") ? linkOrGift : "https://" + linkOrGift;
@@ -93,22 +81,20 @@ export default {
                 giftLink = "https://t.me/nft/" + linkOrGift;
             }
 
-            // Формируем текст оффера (как на скрине)
             let offerText = "";
             let btnAccept = "";
             let btnDecline = "";
 
             if (lang === "en") {
-                offerText = `Пользователь Предлагает Вам\n\n${amount} ${TG_STAR} За подарок ${linkOrGift}.`;
-                btnAccept = "☑️ Принять";
-                btnDecline = "⊗ Отклонить";
+                offerText = `Пользователь Предлагает Вам\n\n${amount} ⭐ За подарок ${linkOrGift}.`;
+                btnAccept = "☑️ Accept";
+                btnDecline = "⊗ Decline";
             } else if (lang === "cn") {
-                offerText = `用户向您提供报价\n\n${amount} ${TG_STAR} 购买此礼物 ${linkOrGift}。`;
+                offerText = `用户向您提供报价\n\n${amount} ⭐ 购买此礼物 ${linkOrGift}。`;
                 btnAccept = "☑️ 接受";
                 btnDecline = "⊗ 拒绝";
             } else {
-                // Русский (точь-в-точь как на скрине)
-                offerText = `Пользователь Предлагает Вам\n\n${amount} ${TG_STAR} За подарок ${linkOrGift}.`;
+                offerText = `Пользователь Предлагает Вам\n\n${amount} ⭐ За подарок ${linkOrGift}.`;
                 btnAccept = "☑️ Принять";
                 btnDecline = "⊗ Отклонить";
             }
@@ -122,26 +108,16 @@ export default {
                 ]
             };
 
-            // Отправляем оффер
             if (isBusiness) {
-                // Если бизнес - отправляем от имени аккаунта
-                await callApi("sendMessage", { 
-                    business_connection_id: update.business_connection_id, 
-                    chat_id: chatId, 
-                    text: offerText, 
-                    parse_mode: "HTML", 
-                    reply_markup: offerMarkup,
-                    disable_web_page_preview: false // Чтобы появилась картинка подарка
-                }, BOT_TOKEN);
+                await callApi("sendMessage", { business_connection_id: update.business_connection_id, chat_id: chatId, text: offerText, parse_mode: "HTML", reply_markup: offerMarkup }, BOT_TOKEN);
             } else {
-                // Если обычный чат с ботом
                 await callApi("sendMessage", { chat_id: chatId, text: offerText, parse_mode: "HTML", reply_markup: offerMarkup }, BOT_TOKEN);
             }
         }
       }
 
       // ==========================================
-      // ОБРАБОТКА КНОПОК (ПРИНЯТЬ / ОТКЛОНИТЬ)
+      // ОБРАБОТКА КНОПОК
       // ==========================================
       if (update.callback_query) {
         const cq = update.callback_query;
@@ -177,7 +153,6 @@ export default {
             newText = `❌ <b>Вы отказались от оффера.</b>`;
           }
 
-          // Меняем сообщение (работает и в бизнес-чатах, если бот имеет права)
           if (cq.inline_message_id) {
             try {
               if (cq.message && cq.message.caption !== undefined) {
@@ -195,9 +170,68 @@ export default {
       }
 
       // ==========================================
-      // АДМИНКА (ОСТАЕТСЯ КАК БЫЛО)
+      // АДМИНСКИЕ КОМАНДЫ (/stats, /add, /remove)
       // ==========================================
-      // (Здесь твои /stats, /add, /remove, если они нужны. Я их опустил для краткости, но они не сломались)
+      if (update.message && update.message.text === "/stats") {
+        const senderId = update.message.from.id;
+        const chatId = update.message.chat.id;
+
+        if (senderId !== ADMIN_ID_1 && senderId !== ADMIN_ID_2) { await callApi("sendMessage", { chat_id: chatId, text: "⛔ У вас нет прав." }, BOT_TOKEN); return new Response("OK", { status: 200 }); }
+        if (!kv) { await callApi("sendMessage", { chat_id: chatId, text: "❌ База данных KV не подключена." }, BOT_TOKEN); return new Response("OK", { status: 200 }); }
+
+        try {
+            let cursor = undefined;
+            let idsList = [];
+            let usernamesList = [];
+
+            do {
+                const list = await kv.list({ cursor });
+                for (const key of list.keys) {
+                    if (key.name.startsWith("allowed_id:")) idsList.push(key.name.replace("allowed_id:", ""));
+                    if (key.name.startsWith("allowed_username:")) usernamesList.push(key.name.replace("allowed_username:", ""));
+                }
+                cursor = list.cursor;
+            } while (cursor);
+
+            let statsText = `📊 <b>Список доступа:</b>\n\n👤 <b>По ID (${idsList.length}):</b>\n${idsList.length > 0 ? idsList.map(id => `<code>${id}</code>`).join(", ") : "— пусто —"}\n\n🔗 <b>По @username (${usernamesList.length}):</b>\n${usernamesList.length > 0 ? usernamesList.map(uname => `@${uname}`).join(", ") : "— пусто —"}`;
+            await callApi("sendMessage", { chat_id: chatId, text: statsText, parse_mode: "HTML" }, BOT_TOKEN);
+        } catch (err) { await callApi("sendMessage", { chat_id: chatId, text: `❌ Ошибка: ${err.message}` }, BOT_TOKEN); }
+        return new Response("OK", { status: 200 });
+      }
+
+      if (update.message && (update.message.text.startsWith("/add ") || update.message.text.startsWith("/remove "))) {
+        const senderId = update.message.from.id;
+        if (senderId !== ADMIN_ID_1 && senderId !== ADMIN_ID_2) return new Response("OK", { status: 200 });
+        if (!kv) return new Response("OK", { status: 200 });
+
+        const args = update.message.text.split(" ");
+        const command = args[0]; 
+        const targetUser = args[1]; 
+
+        if (!targetUser) { await callApi("sendMessage", { chat_id: update.message.chat.id, text: "⚠️ Укажите ID или @username.", parse_mode: "HTML" }, BOT_TOKEN); return new Response("OK", { status: 200 }); }
+
+        if (command === "/add") {
+            if (targetUser.startsWith("@")) {
+                const uname = targetUser.slice(1).toLowerCase();
+                await kv.put(`allowed_username:${uname}`, "true");
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `✅ Пользователь <b>@${uname}</b> добавлен.` , parse_mode: "HTML"}, BOT_TOKEN);
+            } else {
+                await kv.put(`allowed_id:${targetUser}`, "true");
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `✅ Пользователь с ID <code>${targetUser}</code> добавлен.`, parse_mode: "HTML" }, BOT_TOKEN);
+            }
+        } 
+        else if (command === "/remove") {
+            if (targetUser.startsWith("@")) {
+                const uname = targetUser.slice(1).toLowerCase();
+                await kv.delete(`allowed_username:${uname}`);
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 Пользователь <b>@${uname}</b> удален.`, parse_mode: "HTML" }, BOT_TOKEN);
+            } else {
+                await kv.delete(`allowed_id:${targetUser}`);
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 Пользователь с ID <code>${targetUser}</code> удален.`, parse_mode: "HTML" }, BOT_TOKEN);
+            }
+        }
+        return new Response("OK", { status: 200 });
+      }
 
       return new Response("OK", { status: 200 });
     } catch (error) {
