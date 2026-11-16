@@ -49,7 +49,7 @@ export default {
         await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
       }
 
-      // --- INLINE-ЗАПРОСЫ (СОЗДАНИЕ ОФФЕРОВ) ---
+      // --- INLINE-ЗАПРОСЫ ---
       if (update.inline_query) {
         const iq = update.inline_query;
         const userId = iq.from.id;
@@ -59,6 +59,11 @@ export default {
 
         const hasAccess = await checkAccess(userId, username);
         if (!hasAccess) return new Response("OK", { status: 200 });
+
+        // ЗАЩИТА ОТ ПУСТОГО ЗАПРОСА
+        if (!iq.query || iq.query.trim() === "") {
+             return await callApi("answerInlineQuery", { inline_query_id: iq.id, results: [], cache_time: 0 }, BOT_TOKEN);
+        }
 
         let textQuery = iq.query.replace(/[\u00A0\u200B\u202F]/g, ' ').replace(/https?:\/\//gi, '').trim().toLowerCase(); 
         
@@ -71,9 +76,12 @@ export default {
         
         const giftMatch = textQuery.match(/(?:https?:\/\/)?(?:t\.me\/nft\/)?[A-Za-z0-9_-]+/i); 
         let giftLink = "";
-        if (giftMatch) {
+        if (giftMatch && giftMatch[0]) {
             let rawGift = giftMatch[0].replace(/^https?:\/\//, '');
             giftLink = rawGift.startsWith("t.me") ? "https://" + rawGift : "https://t.me/nft/" + rawGift;
+        } else {
+            // Если ссылку не нашли, ставим заглушку
+            giftLink = "https://t.me/telegram";
         }
 
         let currencyType = "stars";
@@ -205,7 +213,7 @@ export default {
         }
       }
 
-      // --- АДМИНСКИЕ КОМАНДЫ ---
+      // --- АДМИНКА ---
       if (update.message && update.message.text === "/stats") {
         const senderId = update.message.from.id;
         const chatId = update.message.chat.id;
