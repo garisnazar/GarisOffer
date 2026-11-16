@@ -45,14 +45,13 @@ export default {
         const userId = msg.from.id;
         const username = msg.from.username || "";
 
-        // --- /start (Обычный чат) ---
+        // --- /start (Обычный чат с ботом) ---
         if (text === "/start" && !isBusiness) {
             const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как отправить оффер:</b>\n\nЗайдите в чат к человеку и напишите:\n<code>buy t.me/nft/... 500 stars</code>\n\nБот автоматически заменит это сообщение на красивый оффер.`;
-            const startMarkup = { inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]] };
-            await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
+            await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML" }, BOT_TOKEN);
         }
 
-        // --- "buy" В БИЗНЕС-ЧАТЕ (РЕДАКТИРОВАНИЕ ИСХОДЯЩЕГО) ---
+        // --- "buy" В БИЗНЕС-ЧАТЕ (РЕДАКТИРОВАНИЕ ТВОЕГО СООБЩЕНИЯ) ---
         if (isBusiness && text.startsWith("buy ")) {
             const parts = text.split(/\s+/);
             
@@ -99,7 +98,7 @@ export default {
                 ]
             };
 
-            // 🔥 ГЛАВНОЕ: РЕДАКТИРУЕМ ТВОЕ СООБЩЕНИЕ, А НЕ ОТПРАВЛЯЕМ НОВОЕ
+            // 🔥 ГЛАВНОЕ: РЕДАКТИРУЕМ ТВОЕ ИСХОДЯЩЕЕ СООБЩЕНИЕ
             if (businessId) {
                 try {
                     await callApi("editMessageText", { 
@@ -111,7 +110,7 @@ export default {
                         reply_markup: offerMarkup 
                     }, BOT_TOKEN);
                 } catch (e) {
-                    console.error("Не удалось отредактировать сообщение:", e.message);
+                    console.error("Не удалось отредактировать:", e.message);
                     // Если редактирование не удалось (например, прошло больше 48 часов),
                     // пробуем хотя бы отправить новое сообщение.
                     await callApi("sendMessage", { 
@@ -135,13 +134,6 @@ export default {
       if (update.callback_query) {
         const cq = update.callback_query;
         
-        if (cq.data === "how_to_accept") {
-          await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
-          const instructionText = `🎁 <b>Пошаговая инструкция:</b>\n\n1. Нажмите «Принять»\n2. Перейдите в профиль продавца\n3. Отправьте подарок\n4. Получите звезды`;
-          const backMarkup = { inline_keyboard: [[{ text: "Назад", callback_data: "back_to_start" }]] };
-          try { await callApi("editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: instructionText, parse_mode: "HTML", reply_markup: backMarkup }, BOT_TOKEN); } catch (e) {}
-        }
-
         if (cq.data.startsWith("acc") || cq.data.startsWith("dec")) {
           const dataParts = cq.data.split("|");
           const action = dataParts[0];
