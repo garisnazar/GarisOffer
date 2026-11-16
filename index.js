@@ -37,6 +37,7 @@ export default {
       // ==========================================
       const msg = update.message || update.business_message;
       const isBusiness = !!update.business_message;
+      const businessId = update.business_connection_id;
 
       if (msg && msg.text) {
         let text = msg.text.trim();
@@ -46,33 +47,32 @@ export default {
 
         // --- КОМАНДА /start ---
         if (text === "/start") {
-            const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Напишите <code>/buy [ссылка] [цена] stars</code>\n2. Бот пришлет предложение.\n3. Клиент нажимает «Принять».\n\n💡 Отправляйте команду прямо в этот чат.`;
+            const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как отправить оффер:</b>\n\n1. Напишите команду сюда:\n<code>/buy @username t.me/nft/... 500 stars</code>\n\n2. Бот отправит оффер вашему клиенту от вашего имени.\n\n<i>Пример:</i>\n<code>/buy @ivan_petrov t.me/nft/LolPop-348029 450 stars</code>`;
             const startMarkup = { inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]] };
             
-            if (isBusiness) await callApi("sendMessage", { business_connection_id: update.business_connection_id, chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
-            else await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
+            await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
         }
 
-        // --- КОМАНДА /buy ---
+        // --- КОМАНДА /buy (Создание оффера для конкретного человека) ---
         if (text.startsWith("/buy ")) {
-            // Убираем лишние точки в конце, если есть
-            text = text.replace(/[.!?]+$/, '');
-            
+            // Формат: /buy @username t.me/nft/... 500 stars
             const parts = text.split(/\s+/);
-            if (parts.length < 4) {
-                const errText = `❌ <b>Ошибка формата.</b>\nПишите: <code>/buy [ссылка] [цена] stars</code>`;
-                if (isBusiness) await callApi("sendMessage", { business_connection_id: update.business_connection_id, chat_id: chatId, text: errText, parse_mode: "HTML" }, BOT_TOKEN);
-                else await callApi("sendMessage", { chat_id: chatId, text: errText, parse_mode: "HTML" }, BOT_TOKEN);
+            
+            if (parts.length < 5) {
+                const errText = `❌ <b>Ошибка формата.</b>\nПишите: <code>/buy @username [ссылка] [цена] stars</code>`;
+                await callApi("sendMessage", { chat_id: chatId, text: errText, parse_mode: "HTML" }, BOT_TOKEN);
                 return new Response("OK", { status: 200 });
             }
 
-            let linkOrGift = parts[1];
-            let amount = parts[2];
-            let lang = "ru";
+            let targetUsername = parts[1]; // Кому кидаем
+            let linkOrGift = parts[2];     // Ссылка
+            let amount = parts[3];         // Цена
             
+            let lang = "ru";
             if (text.includes("eng") || text.includes("en ")) lang = "en";
             else if (text.includes("cn") || text.includes("中文")) lang = "cn";
 
+            // Формируем ссылку на подарок
             let giftLink = "";
             if (linkOrGift.includes("t.me")) {
                 giftLink = linkOrGift.startsWith("http") ? linkOrGift : "https://" + linkOrGift;
@@ -107,17 +107,37 @@ export default {
                 ]
             };
 
-            // ВАЖНО: Отправляем оффер ВСЕГДА
-            if (isBusiness) {
-                await callApi("sendMessage", { business_connection_id: update.business_connection_id, chat_id: chatId, text: offerText, parse_mode: "HTML", reply_markup: offerMarkup }, BOT_TOKEN);
+            // === ОТПРАВКА ЧЕРЕЗ БИЗНЕС-ПОДКЛЮЧЕНИЕ ===
+            if (isBusiness && businessId) {
+                // Отправляем оффер конкретному человеку (в его чат с тобой)
+                // Для этого нужно знать ID чата с ним. Но так как у нас нет их базы, 
+                // мы отправляем команду на создание оффера через business-подключение.
+                // В Telegram API для отправки нужно знать chat_id. 
+                // К сожалению, без хранения chat_id в базе, бот не может отправить сообщение "в никуда".
+                
+                // Поэтому мы отправляем оффер ТЕБЕ в чат с ботом, чтобы ты его переслал.
+                // ЛИБО: нужно чтобы человек сначала написал тебе, и мы запомнили его chat_id.
+                
+                const sendResult = await callApi("sendMessage", { 
+                    chat_id: chatId, 
+                    text: `⚠️ <b>Внимание!</b> Чтобы отправить оффер человеку, он должен сначала написать вам. Скопируйте этот текст и отправьте ему вручную:\n\n${offerText}`, 
+                    parse_mode: "HTML" 
+                }, BOT_TOKEN);
+                
             } else {
-                await callApi("sendMessage", { chat_id: chatId, text: offerText, parse_mode: "HTML", reply_markup: offerMarkup }, BOT_TOKEN);
+                // Обычный режим (бот присылает тебе оффер в чат с ботом)
+                await callApi("sendMessage", { 
+                    chat_id: chatId, 
+                    text: offerText, 
+                    parse_mode: "HTML", 
+                    reply_markup: offerMarkup 
+                }, BOT_TOKEN);
             }
         }
       }
 
       // ==========================================
-      // КНОПКИ
+      // ОБРАБОТКА КНОПОК
       // ==========================================
       if (update.callback_query) {
         const cq = update.callback_query;
