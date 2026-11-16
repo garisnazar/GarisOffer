@@ -114,12 +114,23 @@ export default {
             titleText = `Оффер от ${senderName}`;
         }
 
+        // Короткий ID для кнопок, чтобы они работали
+        const offerId = Math.random().toString(36).substring(2, 10);
+        if (kv) {
+            await kv.put(`offer:${offerId}`, JSON.stringify({
+                amount, currencyType, sellerUsername, giftLink, lang, senderName
+            }), { expirationTtl: 86400 });
+        }
+
         const results = [{
           type: "article", id: "1",
           title: titleText,
           description: `За ${amount} ${currencyDisplay}`,
           input_message_content: { message_text: text, parse_mode: "HTML" },
-          reply_markup: { inline_keyboard: [[{ text: btnAccept, callback_data: `acc|${amount}|${currencyType}|${sellerUsername}|${giftLink}|${lang}` }],[{ text: btnDecline, callback_data: `dec|${amount}|${currencyType}|${lang}` }]] }
+          reply_markup: { inline_keyboard: [
+              [{ text: btnAccept, callback_data: `acc|${offerId}` }],
+              [{ text: btnDecline, callback_data: `dec|${offerId}` }]
+          ] }
         }];
 
         await callApi("answerInlineQuery", { inline_query_id: iq.id, results: results, cache_time: 0 }, BOT_TOKEN);
@@ -132,7 +143,6 @@ export default {
         const cq = update.callback_query;
         const chatId = cq.message.chat.id;
         
-        // Инструкция как принять оффер
         if (cq.data === "how_to_accept") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
           const instructionText = `🎁 <b>Пошаговая инструкция: как принять оффер и получить ⭐️</b>\n\n<b>Шаг 1.</b> Нажмите кнопку «Принять» под сообщением с предложением\n\n<b>Шаг 2.</b> Проверьте сумму и условия сделки\n\n<b>Шаг 3.</b> Нажмите кнопку «🎁 Передать подарок» в сообщении от бота\n\n<b>Шаг 4.</b> Откроется страница подарка — нажмите там кнопку «Передать»\n\n<b>Шаг 5.</b> Выберите продавца из списка и подтвердите передачу\n\n<b>Шаг 6.</b> Дождитесь проверки передачи и оплаты\n\n✅ <b>Проверка передачи:</b>\nСтатус обновляется после фактического подтверждения получения подарка и расчёта.`;
@@ -140,7 +150,6 @@ export default {
           try { await callApi("editMessageText", { chat_id: chatId, message_id: cq.message.message_id, text: instructionText, parse_mode: "HTML", reply_markup: backMarkup }, BOT_TOKEN); } catch (e) {}
         }
 
-        // Возврат к старту
         if (cq.data === "back_to_start") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
           const userId = cq.from.id;
@@ -149,17 +158,24 @@ export default {
           try { await callApi("editMessageText", { chat_id: chatId, message_id: cq.message.message_id, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN); } catch (e) {}
         }
 
-        // ОБРАБОТКА КНОПОК ПРИНЯТЬ/ОТКЛОНИТЬ В ОФФЕРАХ
         if (cq.data.startsWith("acc") || cq.data.startsWith("dec")) {
           const dataParts = cq.data.split("|");
           const action = dataParts[0];
-          const amount = dataParts[1] || "0";
-          const currencyType = dataParts[2] || "stars";
-          const sellerUsername = dataParts[3] || "gwrex"; 
-          const giftLink = dataParts[4] || ""; 
+          const offerId = dataParts[1];
           
-          let lang = "ru";
-          if (action === "acc") { lang = dataParts[5] || "ru"; } else { lang = dataParts[3] || "ru"; }
+          if (!offerId) return new Response("OK", { status: 200 });
+
+          let offer = { amount: "0", currencyType: "stars", sellerUsername: "gwrex", giftLink: "", lang: "ru" };
+          if (kv) {
+              const saved = await kv.get(`offer:${offerId}`);
+              if (saved) offer = JSON.parse(saved);
+          }
+
+          const amount = offer.amount;
+          const currencyType = offer.currencyType;
+          const sellerUsername = offer.sellerUsername;
+          const giftLink = offer.giftLink;
+          const lang = offer.lang;
           
           let displayCurrency = "⭐ Stars";
           if (currencyType === "gram") displayCurrency = "💎 Gram";
@@ -217,7 +233,7 @@ export default {
       }
 
       // ==========================================
-      // АДМИНСКИЕ КОМАНДЫ (/stats, /add, /remove)
+      // АДМИНСКИЕ КОМАНДЫ
       // ==========================================
       if (update.message && update.message.text === "/stats") {
         const senderId = update.message.from.id;
