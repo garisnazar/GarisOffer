@@ -18,21 +18,6 @@ export default {
       const update = await request.json();
 
       // ==========================================
-      // ПРОВЕРКА ДОСТУПА
-      // ==========================================
-      async function checkAccess(userId, username) {
-          if (userId === ADMIN_ID_1 || userId === ADMIN_ID_2) return true; 
-          if (!kv) return false; 
-          const byId = await kv.get(`allowed_id:${userId}`);
-          if (byId) return true;
-          if (username) {
-              const byName = await kv.get(`allowed_username:${username.toLowerCase()}`);
-              if (byName) return true;
-          }
-          return false;
-      }
-
-      // ==========================================
       // ОБРАБОТКА СООБЩЕНИЙ
       // ==========================================
       const msg = update.message || update.business_message;
@@ -51,7 +36,7 @@ export default {
             await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML" }, BOT_TOKEN);
         }
 
-        // --- "buy" В БИЗНЕС-ЧАТЕ (РЕДАКТИРОВАНИЕ ТВОЕГО СООБЩЕНИЯ) ---
+        // --- "buy" В БИЗНЕС-ЧАТЕ (УДАЛЕНИЕ И ОТПРАВКА НОВОГО) ---
         if (isBusiness && text.startsWith("buy ")) {
             const parts = text.split(/\s+/);
             
@@ -98,21 +83,21 @@ export default {
                 ]
             };
 
-            // 🔥 ГЛАВНОЕ: РЕДАКТИРУЕМ ТВОЕ ИСХОДЯЩЕЕ СООБЩЕНИЕ
+            // 🔥 ГЛАВНОЕ: СНАЧАЛА УДАЛЯЕМ ТВОЕ СООБЩЕНИЕ, ПОТОМ ОТПРАВЛЯЕМ НОВОЕ
             if (businessId) {
                 try {
-                    await callApi("editMessageText", { 
+                    // 1. Удаляем сообщение с командой
+                    await callApi("deleteMessage", { 
                         business_connection_id: businessId,
                         chat_id: chatId, 
-                        message_id: msg.message_id,
-                        text: offerText, 
-                        parse_mode: "HTML", 
-                        reply_markup: offerMarkup 
+                        message_id: msg.message_id
                     }, BOT_TOKEN);
                 } catch (e) {
-                    console.error("Не удалось отредактировать:", e.message);
-                    // Если редактирование не удалось (например, прошло больше 48 часов),
-                    // пробуем хотя бы отправить новое сообщение.
+                    console.error("Не удалось удалить сообщение:", e.message);
+                }
+
+                // 2. Отправляем оффер от твоего имени
+                try {
                     await callApi("sendMessage", { 
                         business_connection_id: businessId, 
                         chat_id: chatId, 
@@ -120,10 +105,12 @@ export default {
                         parse_mode: "HTML", 
                         reply_markup: offerMarkup 
                     }, BOT_TOKEN);
+                } catch (e) {
+                    console.error("Не удалось отправить оффер:", e.message);
                 }
             } else {
-                // Если это не бизнес-чат (тест в боте)
-                await callApi("editMessageText", { chat_id: chatId, message_id: msg.message_id, text: offerText, parse_mode: "HTML", reply_markup: offerMarkup }, BOT_TOKEN);
+                // Тест в обычном чате (не бизнес)
+                await callApi("sendMessage", { chat_id: chatId, text: offerText, parse_mode: "HTML", reply_markup: offerMarkup }, BOT_TOKEN);
             }
         }
       }
