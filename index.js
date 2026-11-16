@@ -33,7 +33,7 @@ export default {
       }
 
       // ==========================================
-      // ОБРАБОТКА СООБЩЕНИЙ (И ОБЫЧНЫХ, И БИЗНЕС)
+      // ОБРАБОТКА СООБЩЕНИЙ
       // ==========================================
       const msg = update.message || update.business_message;
       const isBusiness = !!update.business_message;
@@ -45,21 +45,18 @@ export default {
         const userId = msg.from.id;
         const username = msg.from.username || "";
 
-        // --- КОМАНДА /start (Обычный чат с ботом) ---
+        // --- /start (Обычный чат) ---
         if (text === "/start" && !isBusiness) {
             const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как отправить оффер:</b>\n\nЗайдите в чат к человеку и напишите:\n<code>buy t.me/nft/... 500 stars</code>\n\nБот автоматически заменит это сообщение на красивый оффер.`;
             const startMarkup = { inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]] };
             await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
         }
 
-        // --- КОМАНДА "buy" (БЕЗ СЛЕША) В БИЗНЕС-ЧАТЕ ---
+        // --- "buy" В БИЗНЕС-ЧАТЕ (РЕДАКТИРОВАНИЕ ИСХОДЯЩЕГО) ---
         if (isBusiness && text.startsWith("buy ")) {
             const parts = text.split(/\s+/);
             
-            if (parts.length < 3) {
-                // Если формат неверный, ничего не делаем (чтобы не спамить)
-                return new Response("OK", { status: 200 });
-            }
+            if (parts.length < 3) return new Response("OK", { status: 200 });
 
             let linkOrGift = parts[1];
             let amount = parts[2];
@@ -102,31 +99,32 @@ export default {
                 ]
             };
 
-            // 1. Удаляем сообщение с командой "buy ..." (если есть права)
+            // 🔥 ГЛАВНОЕ: РЕДАКТИРУЕМ ТВОЕ СООБЩЕНИЕ, А НЕ ОТПРАВЛЯЕМ НОВОЕ
             if (businessId) {
                 try {
-                    await callApi("deleteMessage", { 
+                    await callApi("editMessageText", { 
+                        business_connection_id: businessId,
                         chat_id: chatId, 
                         message_id: msg.message_id,
-                        business_connection_id: businessId 
+                        text: offerText, 
+                        parse_mode: "HTML", 
+                        reply_markup: offerMarkup 
                     }, BOT_TOKEN);
                 } catch (e) {
-                    console.error("Не удалось удалить сообщение:", e.message);
+                    console.error("Не удалось отредактировать сообщение:", e.message);
+                    // Если редактирование не удалось (например, прошло больше 48 часов),
+                    // пробуем хотя бы отправить новое сообщение.
+                    await callApi("sendMessage", { 
+                        business_connection_id: businessId, 
+                        chat_id: chatId, 
+                        text: offerText, 
+                        parse_mode: "HTML", 
+                        reply_markup: offerMarkup 
+                    }, BOT_TOKEN);
                 }
-            }
-
-            // 2. Отправляем оффер от имени бизнес-аккаунта (без "via")
-            if (businessId) {
-                await callApi("sendMessage", { 
-                    business_connection_id: businessId, 
-                    chat_id: chatId, 
-                    text: offerText, 
-                    parse_mode: "HTML", 
-                    reply_markup: offerMarkup 
-                }, BOT_TOKEN);
             } else {
-                // Если это не бизнес-чат (например, ты тестируешь в боте)
-                await callApi("sendMessage", { chat_id: chatId, text: offerText, parse_mode: "HTML", reply_markup: offerMarkup }, BOT_TOKEN);
+                // Если это не бизнес-чат (тест в боте)
+                await callApi("editMessageText", { chat_id: chatId, message_id: msg.message_id, text: offerText, parse_mode: "HTML", reply_markup: offerMarkup }, BOT_TOKEN);
             }
         }
       }
