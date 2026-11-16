@@ -36,7 +36,7 @@ export default {
             await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML" }, BOT_TOKEN);
         }
 
-        // --- "buy" В БИЗНЕС-ЧАТЕ (УДАЛЕНИЕ И ОТПРАВКА) ---
+        // --- "buy" В БИЗНЕС-ЧАТЕ ---
         if (isBusiness && text.startsWith("buy ")) {
             const parts = text.split(/\s+/);
             if (parts.length < 3) return new Response("OK", { status: 200 });
@@ -82,18 +82,8 @@ export default {
                 ]
             };
 
-            // УДАЛЯЕМ И ОТПРАВЛЯЕМ (ЗАЩИЩЕНО ОТ ПАДЕНИЙ)
+            // ПЫТАЕМСЯ ОТПРАВИТЬ ОФФЕР ЧЕРЕЗ БИЗНЕС-ПОДКЛЮЧЕНИЕ
             if (businessId) {
-                try {
-                    await callApi("deleteMessage", { 
-                        business_connection_id: businessId,
-                        chat_id: chatId, 
-                        message_id: msg.message_id
-                    }, BOT_TOKEN);
-                } catch (e) {
-                    console.error("Ошибка удаления:", e.message);
-                }
-
                 try {
                     await callApi("sendMessage", { 
                         business_connection_id: businessId, 
@@ -103,9 +93,16 @@ export default {
                         reply_markup: offerMarkup 
                     }, BOT_TOKEN);
                 } catch (e) {
-                    console.error("Ошибка отправки:", e.message);
+                    console.error("Не удалось отправить через бизнес:", e.message);
+                    // Если не удалось, пробуем удалить сообщение и отправить как обычный бот
+                    try {
+                        await callApi("deleteMessage", { chat_id: chatId, message_id: msg.message_id }, BOT_TOKEN);
+                    } catch(err) {}
+                    
+                    await callApi("sendMessage", { chat_id: chatId, text: offerText, parse_mode: "HTML", reply_markup: offerMarkup }, BOT_TOKEN);
                 }
             } else {
+                // Обычный чат
                 await callApi("sendMessage", { chat_id: chatId, text: offerText, parse_mode: "HTML", reply_markup: offerMarkup }, BOT_TOKEN);
             }
         }
