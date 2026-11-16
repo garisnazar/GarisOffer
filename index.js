@@ -18,41 +18,43 @@ export default {
       const update = await request.json();
 
       // ==========================================
-      // ОБРАБОТКА СООБЩЕНИЙ
+      // ОБРАБОТКА СООБЩЕНИЙ (СОХРАНЯЕМ ID ЧАТОВ)
       // ==========================================
       const msg = update.message || update.business_message;
       const isBusiness = !!update.business_message;
+      const businessId = update.business_connection_id;
 
       if (msg && msg.text) {
         let text = msg.text.trim();
         const chatId = msg.chat.id; 
         const userId = msg.from.id;
-        const username = msg.from.username || "";
+        const username = msg.from.username ? msg.from.username.toLowerCase() : "";
 
-        // --- /start (Обычный чат) ---
+        // СОХРАНЯЕМ ID ЧАТА, ЕСЛИ ЧЕЛОВЕК ПИШЕТ НАМ В БИЗНЕС-ЧАТЕ
+        if (isBusiness && username && kv) {
+            await kv.put(`user_chat:${username}`, chatId);
+        }
+
+        // --- /start (Обычный чат с ботом) ---
         if (text === "/start" && !isBusiness) {
-            const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как отправить оффер:</b>\n\nЗайдите в чат к человеку и напишите:\n<code>buy t.me/nft/... 500 stars</code>\n\nБот пришлет красивый оффер следом.`;
+            const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как отправить оффер:</b>\n\nНапишите боту:\n<code>/buy @username t.me/nft/... 500 stars</code>\n\nБот отправит оффер этому человеку от вашего имени.`;
             await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML" }, BOT_TOKEN);
         }
 
-        // --- "buy" В БИЗНЕС-ЧАТЕ ---
-        if (isBusiness && text.startsWith("buy ")) {
+        // --- КОМАНДА /buy (ИЗ ЧАТА С БОТОМ) ---
+        if (text.startsWith("/buy ") && !isBusiness) {
             const parts = text.split(/\s+/);
-            if (parts.length < 3) return new Response("OK", { status: 200 });
-
-            let linkOrGift = parts[1];
-            let amount = parts[2];
-            let lang = "ru";
-            
-            if (text.includes("eng") || text.includes("en ")) lang = "en";
-            else if (text.includes("cn") || text.includes("中文")) lang = "cn";
-
-            let giftLink = "";
-            if (linkOrGift.includes("t.me")) {
-                giftLink = linkOrGift.startsWith("http") ? linkOrGift : "https://" + linkOrGift;
-            } else {
-                giftLink = "https://t.me/nft/" + linkOrGift;
+            if (parts.length < 5) {
+                await callApi("sendMessage", { chat_id: chatId, text: "❌ <b>Ошибка формата.</b>\nПишите: <code>/buy @username [ссылка] [цена] stars</code>", parse_mode: "HTML" }, BOT_TOKEN);
+                return new Response("OK", { status: 200 });
             }
+
+            let targetUsername = parts[1].replace("@", "").toLowerCase();
+            let linkOrGift = parts[2];
+            let amount = parts[3];
+            let lang = text.includes("eng") ? "en" : (text.includes("cn") ? "cn" : "ru");
+
+            let giftLink = linkOrGift.includes("t.me") ? (linkOrGift.startsWith("http") ? linkOrGift : "https://" + linkOrGift) : "https://t.me/nft/" + linkOrGift;
 
             let offerText = "";
             let btnAccept = "";
@@ -72,22 +74,15 @@ export default {
                 btnDecline = "⊗ Отклонить";
             }
 
-            const offerMarkup = {
-                inline_keyboard: [
-                    [
-                        { text: btnAccept, callback_data: `acc|${amount}|stars|${username || "gwrex"}|${giftLink}|${lang}` },
-                        { text: btnDecline, callback_data: `dec|${amount}|stars|${lang}` }
-                    ]
-                ]
-            };
+            const offerMarkup = { inline_keyboard: [[{ text: btnAccept, callback_data: `acc|${amount}|stars|${username || "gwrex"}|${giftLink}|${lang}` }, { text: btnDecline, callback_data: `dec|${amount}|stars|${lang}` }]] };
 
-            // ПРОСТО ОТПРАВЛЯЕМ НОВОЕ СООБЩЕНИЕ С ОФФЕРОМ
-            await callApi("sendMessage", { 
-                chat_id: chatId, 
-                text: offerText, 
-                parse_mode: "HTML", 
-                reply_markup: offerMarkup 
-            }, BOT_TOKEN);
+            let targetChatId = await kv.get(`user_chat:${targetUsername}`);
+            if (targetChatId) {
+                await callApi("sendMessage", { chat_id: targetChatId, text: offerText, parse_mode: "HTML", reply_markup: offerMarkup }, BOT_TOKEN);
+                await callApi("sendMessage", { chat_id: chatId, text: `✅ Оффер отправлен @${targetUsername}.`, parse_mode: "HTML" }, BOT_TOKEN);
+            } else {
+                await callApi("sendMessage", { chat_id: chatId, text: `⚠️ Пользователь @${targetUsername} не писал вам. Бот не может отправить первым.`, parse_mode: "HTML" }, BOT_TOKEN);
+            }
         }
       }
 
