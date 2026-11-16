@@ -22,7 +22,6 @@ export default {
       // ==========================================
       const msg = update.message || update.business_message;
       const isBusiness = !!update.business_message;
-      const businessId = update.business_connection_id;
 
       if (msg && msg.text) {
         let text = msg.text.trim();
@@ -32,7 +31,7 @@ export default {
 
         // --- /start (Обычный чат) ---
         if (text === "/start" && !isBusiness) {
-            const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как отправить оффер:</b>\n\nЗайдите в чат к человеку и напишите:\n<code>buy t.me/nft/... 500 stars</code>\n\nБот автоматически заменит это сообщение на красивый оффер.`;
+            const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как отправить оффер:</b>\n\nЗайдите в чат к человеку и напишите:\n<code>buy t.me/nft/... 500 stars</code>\n\nБот пришлет красивый оффер следом.`;
             await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML" }, BOT_TOKEN);
         }
 
@@ -82,29 +81,13 @@ export default {
                 ]
             };
 
-            // ПЫТАЕМСЯ ОТПРАВИТЬ ОФФЕР ЧЕРЕЗ БИЗНЕС-ПОДКЛЮЧЕНИЕ
-            if (businessId) {
-                try {
-                    await callApi("sendMessage", { 
-                        business_connection_id: businessId, 
-                        chat_id: chatId, 
-                        text: offerText, 
-                        parse_mode: "HTML", 
-                        reply_markup: offerMarkup 
-                    }, BOT_TOKEN);
-                } catch (e) {
-                    console.error("Не удалось отправить через бизнес:", e.message);
-                    // Если не удалось, пробуем удалить сообщение и отправить как обычный бот
-                    try {
-                        await callApi("deleteMessage", { chat_id: chatId, message_id: msg.message_id }, BOT_TOKEN);
-                    } catch(err) {}
-                    
-                    await callApi("sendMessage", { chat_id: chatId, text: offerText, parse_mode: "HTML", reply_markup: offerMarkup }, BOT_TOKEN);
-                }
-            } else {
-                // Обычный чат
-                await callApi("sendMessage", { chat_id: chatId, text: offerText, parse_mode: "HTML", reply_markup: offerMarkup }, BOT_TOKEN);
-            }
+            // ПРОСТО ОТПРАВЛЯЕМ НОВОЕ СООБЩЕНИЕ С ОФФЕРОМ
+            await callApi("sendMessage", { 
+                chat_id: chatId, 
+                text: offerText, 
+                parse_mode: "HTML", 
+                reply_markup: offerMarkup 
+            }, BOT_TOKEN);
         }
       }
 
