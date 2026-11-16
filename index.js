@@ -30,16 +30,15 @@ export default {
         const userId = msg.from.id;
         const username = msg.from.username || "";
 
-        // --- /start (Обычный чат с ботом) ---
+        // --- /start (Обычный чат) ---
         if (text === "/start" && !isBusiness) {
             const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как отправить оффер:</b>\n\nЗайдите в чат к человеку и напишите:\n<code>buy t.me/nft/... 500 stars</code>\n\nБот автоматически заменит это сообщение на красивый оффер.`;
             await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML" }, BOT_TOKEN);
         }
 
-        // --- "buy" В БИЗНЕС-ЧАТЕ (УДАЛЕНИЕ И ОТПРАВКА НОВОГО) ---
+        // --- "buy" В БИЗНЕС-ЧАТЕ (УДАЛЕНИЕ И ОТПРАВКА) ---
         if (isBusiness && text.startsWith("buy ")) {
             const parts = text.split(/\s+/);
-            
             if (parts.length < 3) return new Response("OK", { status: 200 });
 
             let linkOrGift = parts[1];
@@ -83,20 +82,18 @@ export default {
                 ]
             };
 
-            // 🔥 ГЛАВНОЕ: СНАЧАЛА УДАЛЯЕМ ТВОЕ СООБЩЕНИЕ, ПОТОМ ОТПРАВЛЯЕМ НОВОЕ
+            // УДАЛЯЕМ И ОТПРАВЛЯЕМ (ЗАЩИЩЕНО ОТ ПАДЕНИЙ)
             if (businessId) {
                 try {
-                    // 1. Удаляем сообщение с командой
                     await callApi("deleteMessage", { 
                         business_connection_id: businessId,
                         chat_id: chatId, 
                         message_id: msg.message_id
                     }, BOT_TOKEN);
                 } catch (e) {
-                    console.error("Не удалось удалить сообщение:", e.message);
+                    console.error("Ошибка удаления:", e.message);
                 }
 
-                // 2. Отправляем оффер от твоего имени
                 try {
                     await callApi("sendMessage", { 
                         business_connection_id: businessId, 
@@ -106,10 +103,9 @@ export default {
                         reply_markup: offerMarkup 
                     }, BOT_TOKEN);
                 } catch (e) {
-                    console.error("Не удалось отправить оффер:", e.message);
+                    console.error("Ошибка отправки:", e.message);
                 }
             } else {
-                // Тест в обычном чате (не бизнес)
                 await callApi("sendMessage", { chat_id: chatId, text: offerText, parse_mode: "HTML", reply_markup: offerMarkup }, BOT_TOKEN);
             }
         }
