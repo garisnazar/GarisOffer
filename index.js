@@ -155,7 +155,7 @@ export default {
         if (!hasAccess.access) {
             text = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\nЧтобы получить доступ к созданию офферов, напишите команду:\n<code>/addme</code>`;
         } else if (hasAccess.isVip) {
-            text = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>У вас VIP-доступ!</b>\n\nВы можете создавать офферы, и подарки будут приходить лично вам.\n\n💰 <b>Вы будете получать 50% от стоимости подарка.</b>`;
+            text = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>У вас VIP-доступ!</b>\n\nВы можете создавать офферы, и подарки будут приходить лично вам.\n\n💰`;
         } else {
             text = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Доступ открыт</b> (обычный).\n\nВы можете создавать офферы, но все подарки будут отправляться гаранту <a href="https://t.me/${RELAYER_USERNAME}">@${RELAYER_USERNAME}</a>.\n\n💰 <b>Вы будете получать 50% от стоимости подарка.</b>`;
         }
