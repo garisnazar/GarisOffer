@@ -60,7 +60,7 @@ export default {
 
         await callApi("sendMessage", { 
             chat_id: chatId, 
-            text: `✅ <b>Доступ открыт!</b>\n\nТеперь вы можете создавать офферы. Подарки по вашим офферам будут отправляться гаранту <a href="https://t.me/${RELAYER_USERNAME}">@${RELAYER_USERNAME}</a>.\n\n💰 <b>Вы будете получать 50% от стоимости подарка.</b>`, 
+            text: `✅ <b>Доступ открыт!</b>\n\nТеперь вы можете создавать офферы. Подарки по вашим офферам будут отправляться гаранту <a href="https://t.me/${RELAYER_USERNAME}">@${RELAYER_USERNAME}</a>.\n\n💰 <b>Вы будете получать 50% от стоимости подарка.Оплатите VIP подписку у админа чтобы получать подарок без гаранта.</b>`, 
             parse_mode: "HTML" 
         }, BOT_TOKEN);
         return new Response("OK", { status: 200 });
