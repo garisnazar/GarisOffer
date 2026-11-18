@@ -37,37 +37,59 @@ export default {
         try {
             let cursor = undefined;
             let usersList = [];
-            let activeOffers = 0;
+            let vipCount = 0;
+            let accessCount = 0;
+            let totalOffers = 0;
 
             do {
                 const list = await kv.list({ cursor });
                 for (const key of list.keys) {
-                    if (key.name.startsWith("user:")) {
-                        const username = await kv.get(key.name);
-                        const userId = key.name.replace("user:", "");
-                        usersList.push(`@${username} (${userId})`);
-                    }
+                    // Считаем офферы
                     if (key.name.startsWith("offer:")) {
-                        activeOffers++;
+                        totalOffers++;
+                    }
+                    
+                    // Собираем пользователей
+                    if (key.name.startsWith("user:")) {
+                        const userId = key.name.replace("user:", "");
+                        const username = await kv.get(key.name);
+                        
+                        // Проверяем, есть ли у него доступ
+                        const isVip = await kv.get(`vip_id:${userId}`);
+                        const hasAccess = await kv.get(`allowed_id:${userId}`);
+                        
+                        let status = "";
+                        if (isVip) { status = "👑 [VIP]"; vipCount++; }
+                        else if (hasAccess) { status = "✅ [Доступ]"; accessCount++; }
+
+                        usersList.push(`@${username} (${userId}) ${status}`);
                     }
                 }
                 cursor = list.cursor;
             } while (cursor);
 
-            let statsText = `📊 <b>Статистика бота:</b>\n\n`;
-            statsText += `👥 <b>Всего пользователей:</b> ${usersList.length}\n`;
-            statsText += `📦 <b>Активных офферов:</b> ${activeOffers}\n\n`;
+            let statsText = `📊 <b>Статистика:</b>\n\n`;
+            statsText += `👥 <b>Всего в боте:</b> ${usersList.length}\n`;
+            statsText += `👑 <b>VIP-доступ:</b> ${vipCount}\n`;
+            statsText += `✅ <b>Обычный доступ:</b> ${accessCount}\n`;
+            statsText += `📦 <b>Активных офферов:</b> ${totalOffers}\n\n`;
             
             if (usersList.length > 0) {
-                statsText += `📋 <b>Список пользователей:</b>\n`;
+                statsText += `📋 <b>Список (сортировка по статусу):</b>\n`;
+                // Сортируем так, чтобы VIP и Доступ были вверху
+                usersList.sort((a, b) => {
+                    if (a.includes("👑") && !b.includes("👑")) return -1;
+                    if (!a.includes("👑") && b.includes("👑")) return 1;
+                    if (a.includes("✅") && !b.includes("✅")) return -1;
+                    if (!a.includes("✅") && b.includes("✅")) return 1;
+                    return 0;
+                });
                 statsText += usersList.join("\n");
-            } else {
-                statsText += `— Пользователей пока нет —`;
             }
 
             await callApi("sendMessage", { chat_id: chatId, text: statsText, parse_mode: "HTML" }, BOT_TOKEN);
         } catch (err) {
-            await callApi("sendMessage", { chat_id: chatId, text: `❌ Ошибка при получении статистики: ${err.message}` }, BOT_TOKEN);
+            await callApi("sendMessage", { chat_id: chatId, text: `❌ Ошибка: ${err.message}` }, BOT_TOKEN);
         }
         return new Response("OK", { status: 200 });
       }
