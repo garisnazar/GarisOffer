@@ -1,7 +1,6 @@
 const ADMIN_ID_1 = 5151757168; 
-const ADMIN_ID_2 = 7423713851; 
 const WEBHOOK_SECRET = "GarisOffer9231998"; 
-const RELAYER_USERNAME = "GarisOffer_Relayer"; 
+const RELAYER_USERNAME = "GarisOfferRelayer"; 
 
 export default {
   async fetch(request, env, ctx) {
