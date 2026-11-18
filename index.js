@@ -1,5 +1,7 @@
-
-const ADMIN_ID = 5151757168;
+const ADMIN_IDS = [
+  5151757168,
+  8880934795
+];
 const WEBHOOK_SECRET = "GarisOffer9231998";
 const RELAYER_USERNAME = "GarisOfferRelayer";
 
