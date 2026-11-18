@@ -1,6 +1,7 @@
 const ADMIN_ID_1 = 5151757168; 
+const ADMIN_ID_2 = 7423713851; 
 const WEBHOOK_SECRET = "GarisOffer9231998"; 
-const RELAYER_USERNAME = "GarisOfferRelayer"; 
+const RELAYER_USERNAME = "GarisOffer_Relayer"; 
 
 export default {
   async fetch(request, env, ctx) {
@@ -59,7 +60,7 @@ export default {
 
         await callApi("sendMessage", { 
             chat_id: chatId, 
-            text: `✅ <b>Доступ открыт!</b>\n\nТеперь вы можете создавать офферы. Подарки по вашим офферам будут отправляться гаранту <a href="https://t.me/${RELAYER_USERNAME}">@${RELAYER_USERNAME}</a>.\n\n💰 <b>Вы будете получать 50% от стоимости подарка.Оплатите VIP подписку у админа чтобы получать подарок без гаранта.</b>`, 
+            text: `✅ <b>Доступ открыт!</b>\n\nТеперь вы можете создавать офферы. Подарки по вашим офферам будут отправляться гаранту <a href="https://t.me/${RELAYER_USERNAME}">@${RELAYER_USERNAME}</a>.\n\n💰 <b>Вы будете получать 50% от стоимости подарка.</b>`, 
             parse_mode: "HTML" 
         }, BOT_TOKEN);
         return new Response("OK", { status: 200 });
@@ -154,7 +155,7 @@ export default {
         if (!hasAccess.access) {
             text = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\nЧтобы получить доступ к созданию офферов, напишите команду:\n<code>/addme</code>`;
         } else if (hasAccess.isVip) {
-            text = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>У вас VIP-доступ!</b>\n\nВы можете создавать офферы, и подарки будут приходить лично вам.`;
+            text = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>У вас VIP-доступ!</b>\n\nВы можете создавать офферы, и подарки будут приходить лично вам.\n\n💰 <b>Вы будете получать 50% от стоимости подарка.</b>`;
         } else {
             text = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Доступ открыт</b> (обычный).\n\nВы можете создавать офферы, но все подарки будут отправляться гаранту <a href="https://t.me/${RELAYER_USERNAME}">@${RELAYER_USERNAME}</a>.\n\n💰 <b>Вы будете получать 50% от стоимости подарка.</b>`;
         }
