@@ -18,7 +18,79 @@ export default {
       const update = await request.json();
 
       // ==========================================
-      // КОМАНДА /stats (ТОЛЬКО ДЛЯ АДМИНА)
+      // КОМАНДЫ /add, /remove И /remove all (ТОЛЬКО ДЛЯ АДМИНА)
+      // ==========================================
+      if (update.message && (update.message.text.startsWith("/add ") || update.message.text.startsWith("/remove "))) {
+        const senderId = update.message.from.id;
+        
+        if (senderId !== ADMIN_ID) {
+            await callApi("sendMessage", { chat_id: update.message.chat.id, text: "⛔ У вас нет прав на эту команду." }, BOT_TOKEN);
+            return new Response("OK", { status: 200 });
+        }
+
+        if (!kv) return new Response("OK", { status: 200 });
+
+        const args = update.message.text.split(" ");
+        const command = args[0]; 
+        const targetUser = args[1]; 
+
+        if (!targetUser) {
+            await callApi("sendMessage", { chat_id: update.message.chat.id, text: "⚠️ Укажите ID или @username.", parse_mode: "HTML" }, BOT_TOKEN);
+            return new Response("OK", { status: 200 });
+        }
+
+        // --- /remove all ---
+        if (command === "/remove" && targetUser.toLowerCase() === "all") {
+            try {
+                let cursor = undefined;
+                let keysToDelete = [];
+                for (let i = 0; i < 3; i++) {
+                    cursor = undefined;
+                    do {
+                        const list = await kv.list({ cursor });
+                        for (const key of list.keys) {
+                            if (key.name.startsWith("vip_")) {
+                                if (key.name === `vip_id:${ADMIN_ID}`) continue;
+                                keysToDelete.push(key.name);
+                            }
+                        }
+                        cursor = list.cursor;
+                    } while (cursor);
+                }
+                keysToDelete = [...new Set(keysToDelete)];
+                for (const key of keysToDelete) await kv.delete(key);
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 <b>VIP-список очищен!</b>\nУдалено записей: ${keysToDelete.length}.`, parse_mode: "HTML" }, BOT_TOKEN);
+            } catch (err) {
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `❌ Ошибка: ${err.message}` }, BOT_TOKEN);
+            }
+            return new Response("OK", { status: 200 });
+        }
+
+        if (command === "/add") {
+            if (targetUser.startsWith("@")) {
+                const uname = targetUser.slice(1).toLowerCase();
+                await kv.put(`vip_username:${uname}`, "true");
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `✅ VIP-доступ для <b>@${uname}</b> выдан.` , parse_mode: "HTML"}, BOT_TOKEN);
+            } else {
+                await kv.put(`vip_id:${targetUser}`, "true");
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `✅ VIP-доступ для ID <code>${targetUser}</code> выдан.`, parse_mode: "HTML" }, BOT_TOKEN);
+            }
+        } 
+        else if (command === "/remove") {
+            if (targetUser.startsWith("@")) {
+                const uname = targetUser.slice(1).toLowerCase();
+                await kv.delete(`vip_username:${uname}`);
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 VIP-доступ для <b>@${uname}</b> удален.`, parse_mode: "HTML" }, BOT_TOKEN);
+            } else {
+                await kv.delete(`vip_id:${targetUser}`);
+                await callApi("sendMessage", { chat_id: update.message.chat.id, text: `🗑 VIP-доступ для ID <code>${targetUser}</code> удален.`, parse_mode: "HTML" }, BOT_TOKEN);
+            }
+        }
+        return new Response("OK", { status: 200 });
+      }
+
+      // ==========================================
+      // КОМАНДА /stats (ТОЛЬКО VIP)
       // ==========================================
       if (update.message && update.message.text === "/stats") {
         const senderId = update.message.from.id;
@@ -36,55 +108,35 @@ export default {
 
         try {
             let cursor = undefined;
-            let usersList = [];
-            let vipCount = 0;
-            let accessCount = 0;
+            let vipUsersList = [];
             let totalOffers = 0;
 
             do {
                 const list = await kv.list({ cursor });
                 for (const key of list.keys) {
-                    // Считаем офферы
                     if (key.name.startsWith("offer:")) {
                         totalOffers++;
                     }
                     
-                    // Собираем пользователей
-                    if (key.name.startsWith("user:")) {
-                        const userId = key.name.replace("user:", "");
-                        const username = await kv.get(key.name);
-                        
-                        // Проверяем, есть ли у него доступ
-                        const isVip = await kv.get(`vip_id:${userId}`);
-                        const hasAccess = await kv.get(`allowed_id:${userId}`);
-                        
-                        let status = "";
-                        if (isVip) { status = "👑 [VIP]"; vipCount++; }
-                        else if (hasAccess) { status = "✅ [Доступ]"; accessCount++; }
-
-                        usersList.push(`@${username} (${userId}) ${status}`);
+                    if (key.name.startsWith("vip_id:")) {
+                        const userId = key.name.replace("vip_id:", "");
+                        // Пытаемся найти ник в базе (если он заходил)
+                        const username = await kv.get(`user:${userId}`) || "нет_в_базе";
+                        vipUsersList.push(`@${username} (${userId})`);
                     }
                 }
                 cursor = list.cursor;
             } while (cursor);
 
             let statsText = `📊 <b>Статистика:</b>\n\n`;
-            statsText += `👥 <b>Всего в боте:</b> ${usersList.length}\n`;
-            statsText += `👑 <b>VIP-доступ:</b> ${vipCount}\n`;
-            statsText += `✅ <b>Обычный доступ:</b> ${accessCount}\n`;
+            statsText += `👑 <b>VIP-пользователей:</b> ${vipUsersList.length}\n`;
             statsText += `📦 <b>Активных офферов:</b> ${totalOffers}\n\n`;
             
-            if (usersList.length > 0) {
-                statsText += `📋 <b>Список (сортировка по статусу):</b>\n`;
-                // Сортируем так, чтобы VIP и Доступ были вверху
-                usersList.sort((a, b) => {
-                    if (a.includes("👑") && !b.includes("👑")) return -1;
-                    if (!a.includes("👑") && b.includes("👑")) return 1;
-                    if (a.includes("✅") && !b.includes("✅")) return -1;
-                    if (!a.includes("✅") && b.includes("✅")) return 1;
-                    return 0;
-                });
-                statsText += usersList.join("\n");
+            if (vipUsersList.length > 0) {
+                statsText += `👑 <b>Список VIP:</b>\n`;
+                statsText += vipUsersList.join("\n");
+            } else {
+                statsText += `— VIP-пользователей пока нет —`;
             }
 
             await callApi("sendMessage", { chat_id: chatId, text: statsText, parse_mode: "HTML" }, BOT_TOKEN);
