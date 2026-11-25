@@ -1,7 +1,7 @@
 const ADMIN_ID = 5151757168; 
 const WEBHOOK_SECRET = "GarisOffer9231998"; 
 const TON_WALLET = "UQChRfzub4CLp2FAV998bfowFC4eE3aqIRQQeZinoajQ0oOG"; 
-const CHAT_LINK = "https://t.me/+24x_cIR6se01NWQy"; // Ссылка на ваш чат
+const CHAT_LINK = "https://t.me/+24x_cIR6se01NWQy"; // Ссылка на ваш чат (выдается ТОЛЬКО после оплаты)
 const BOT_USERNAME = "GarisOfferRobot"; 
 const CHANNEL_ID = "@GarisOfferChanel"; 
 
@@ -108,7 +108,7 @@ export default {
       }
 
       // ==========================================
-      // ВВОД ПРОМОКОДА (ТЕКСТОМ)
+      // ВВОД ПРОМОКОДА (ОДНОРАЗОВЫЙ)
       // ==========================================
       if (update.message && update.message.text.startsWith("/promo ")) {
         const chatId = update.message.chat.id;
@@ -118,6 +118,9 @@ export default {
 
         const promoData = await kv.get(`promo:${promoCode}`);
         if (promoData) {
+            // УДАЛЯЕМ ПРОМОКОД, ЧТОБЫ ОН БЫЛ ОДНОРАЗОВЫМ
+            await kv.delete(`promo:${promoCode}`);
+
             const promo = JSON.parse(promoData);
             const newStars = Math.max(0, BASE_STARS_PRICE - promo.discountStars);
             const newTon = Math.max(0, BASE_TON_PRICE - promo.discountTon).toFixed(2);
@@ -131,7 +134,7 @@ export default {
             };
             await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML", reply_markup: markup }, BOT_TOKEN);
         } else {
-            await callApi("sendMessage", { chat_id: chatId, text: `❌ Промокод не найден или недействителен.`, parse_mode: "HTML" }, BOT_TOKEN);
+            await callApi("sendMessage", { chat_id: chatId, text: `❌ Промокод не найден или уже был использован.`, parse_mode: "HTML" }, BOT_TOKEN);
         }
         return new Response("OK", { status: 200 });
       }
@@ -324,15 +327,16 @@ export default {
         let startText = "";
         let startMarkup = [];
 
+        // ССЫЛКИ НА ЧАТ ЗДЕСЬ НЕТ
         if (hasAccess || freeOffers > 0) {
             startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n✅ <b>Доступ открыт!</b>\n`;
             if (freeOffers > 0) startText += `🎁 <b>Бесплатных офферов:</b> ${freeOffers}\n`;
-            startText += `\n📖 <b>Как создать оффер (пошагово):</b>\n\n1. Зайдите в профиль человека, у которого есть нужный вам подарок.\n2. Найдите этот подарок и скопируйте на него ссылку.\n3. Выйдите в любой чат и напишите:\n\n<code>@${BOT_USERNAME} [ссылка] [цена] [валюта]</code>\n\n<b>Пример:</b>\n<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>\n\n4. Нажмите на окошко, которое выскочит, и отправьте оффер.\n\n💬 <b>Наш чат:</b> ${CHAT_LINK}`;
+            startText += `\n📖 <b>Как создать оффер (пошагово):</b>\n\n1. Зайдите в профиль человека, у которого есть нужный вам подарок.\n2. Найдите этот подарок и скопируйте на него ссылку.\n3. Выйдите в любой чат и напишите:\n\n<code>@${BOT_USERNAME} [ссылка] [цена] [валюта]</code>\n\n<b>Пример:</b>\n<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>\n\n4. Нажмите на окошко, которое выскочит, и отправьте оффер.`;
             startMarkup = [
                 [{ text: "🔗 Пригласить друга", callback_data: "invite_friend" }]
             ];
         } else {
-            startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n🔒 <b>У вас нет доступа.</b>\n\nВы можете купить доступ, нажав на кнопку ниже.\n\n💬 <b>Наш чат:</b> ${CHAT_LINK}`;
+            startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n🔒 <b>У вас нет доступа.</b>\n\nВы можете купить доступ, нажав на кнопку ниже.`;
             startMarkup = [
                 [{ text: "💳 Купить доступ", callback_data: "buy_access" }],
                 [{ text: "🔗 Пригласить друга", callback_data: "invite_friend" }]
@@ -436,14 +440,15 @@ export default {
             await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
             const chatId = cq.message.chat.id;
             const refLink = `https://t.me/${BOT_USERNAME}?start=ref_${cq.from.id}`;
-            const inviteText = `🔗 <b>Ваша реферальная ссылка:</b>\n\n<code>${refLink}</code>\n\n<i>Отправьте её другу. Когда он купит доступ, вы получите:</i>\n🎁 Промокод на скидку 100 Stars\n⚡ <b>5 бесплатных офферов</b> (тратятся по одному, не сгорают)!`;
+            const inviteText = `🔗 <b>Ваша реферальная ссылка:</b>\n\n<code>${refLink}</code>\n\n<i>Отправьте её другу. Когда он купит доступ, вы получите:</i>\n🎁 Промокод на скидку 100 Stars (одноразовый)\n⚡ <b>5 бесплатных офферов</b> (тратятся по одному, не сгорают)!`;
             await callApi("sendMessage", { chat_id: chatId, text: inviteText, parse_mode: "HTML" }, BOT_TOKEN);
         }
 
         if (cq.data === "buy_access") {
             await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
             const chatId = cq.message.chat.id;
-            const buyText = `💳 <b>Выберите способ оплаты:</b>\n\n1. <b>${BASE_STARS_PRICE} ⭐ Stars</b>\n<i>(Можно купить звезды на Playerok)</i>\n\n2. <b>${BASE_TON_PRICE} 💎 TON</b>\n\n💬 <b>После оплаты вы получите доступ и ссылку на наш чат:</b> ${CHAT_LINK}`;
+            // Ссылка на чат убрана
+            const buyText = `💳 <b>Выберите способ оплаты:</b>\n\n1. <b>${BASE_STARS_PRICE} ⭐ Stars</b>\n<i>(Можно купить звезды на Playerok)</i>\n\n2. <b>${BASE_TON_PRICE} 💎 TON</b>\n\n<i>После выбора способа вы получите реквизиты для оплаты.</i>`;
             const buyMarkup = {
                 inline_keyboard: [
                     [{ text: `⭐ Оплатить ${BASE_STARS_PRICE} Stars`, callback_data: "pay_stars" }],
@@ -462,14 +467,15 @@ export default {
         if (cq.data === "pay_stars") {
             await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
             const chatId = cq.message.chat.id;
-            const text = `⭐ <b>Оплата ${BASE_STARS_PRICE} Stars</b>\n\n<b>Инструкция:</b>\n1. Отправьте ${BASE_STARS_PRICE} звезд на аккаунт (перевод по кнопке ниже или через Playerok).\n2. Сделайте скриншот чека.\n3. Отправьте скриншот сюда.\n\n🤖 <i>Наша система автоматически обработает заявку и выдаст доступ.</i>\n\n💬 <b>После проверки вы получите ссылку на чат:</b> ${CHAT_LINK}`;
-            await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" }, BOT_TOKEN);
+            // ЯВНО УКАЗАН @gwrex
+            const text = `⭐ <b>Оплата ${BASE_STARS_PRICE} Stars</b>\n\n<b>Инструкция:</b>\n1. Отправьте ${BASE_STARS_PRICE} звезд на аккаунт <b>@gwrex</b> (или купите их через Playerok).\n2. Сделайте скриншот чека.\n3. Отправьте скриншот сюда.\n\n🤖 <i>Наша система автоматически обработает заявку и выдаст доступ.</i>`;
+            await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML", disable_web_page_preview: true }, BOT_TOKEN);
         }
 
         if (cq.data === "pay_ton") {
             await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
             const chatId = cq.message.chat.id;
-            const text = `💎 <b>Оплата ${BASE_TON_PRICE} TON</b>\n\n<b>Инструкция:</b>\n1. Переведите ${BASE_TON_PRICE} TON на кошелек:\n<code>${TON_WALLET}</code>\n2. Сделайте скриншот чека.\n3. Отправьте скриншот сюда.\n\n🤖 <i>Наша система автоматически обработает заявку и выдаст доступ.</i>\n\n💬 <b>После проверки вы получите ссылку на чат:</b> ${CHAT_LINK}`;
+            const text = `💎 <b>Оплата ${BASE_TON_PRICE} TON</b>\n\n<b>Инструкция:</b>\n1. Переведите ${BASE_TON_PRICE} TON на кошелек:\n<code>${TON_WALLET}</code>\n2. Сделайте скриншот чека.\n3. Отправьте скриншот сюда.\n\n🤖 <i>Наша система автоматически обработает заявку и выдаст доступ.</i>`;
             await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" }, BOT_TOKEN);
         }
 
@@ -477,19 +483,20 @@ export default {
             await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
             const chatId = cq.message.chat.id;
             const price = cq.data.split("_")[3];
-            const text = `⭐ <b>Оплата ${price} Stars (со скидкой)</b>\n\n<b>Инструкция:</b>\n1. Отправьте ${price} звезд на аккаунт (или купите на Playerok).\n2. Сделайте скриншот чека.\n3. Отправьте скриншот сюда.\n\n💬 <b>Ссылка на чат:</b> ${CHAT_LINK}`;
-            await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" }, BOT_TOKEN);
+            // ЯВНО УКАЗАН @gwrex
+            const text = `⭐ <b>Оплата ${price} Stars (со скидкой)</b>\n\n<b>Инструкция:</b>\n1. Отправьте ${price} звезд на аккаунт <b>@gwrex</b> (или купите на Playerok).\n2. Сделайте скриншот чека.\n3. Отправьте скриншот сюда.`;
+            await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML", disable_web_page_preview: true }, BOT_TOKEN);
         }
 
         if (cq.data.startsWith("pay_promo_ton_")) {
             await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
             const chatId = cq.message.chat.id;
             const price = cq.data.split("_")[3];
-            const text = `💎 <b>Оплата ${price} TON (со скидкой)</b>\n\n<b>Инструкция:</b>\n1. Переведите ${price} TON на кошелек:\n<code>${TON_WALLET}</code>\n2. Сделайте скриншот чека.\n3. Отправьте скриншот сюда.\n\n💬 <b>Ссылка на чат:</b> ${CHAT_LINK}`;
+            const text = `💎 <b>Оплата ${price} TON (со скидкой)</b>\n\n<b>Инструкция:</b>\n1. Переведите ${price} TON на кошелек:\n<code>${TON_WALLET}</code>\n2. Сделайте скриншот чека.\n3. Отправьте скриншот сюда.`;
             await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" }, BOT_TOKEN);
         }
 
-        // ОДОБРЕНИЕ / ОТКЛОНЕНИЕ ЧЕКА
+        // ОДОБРЕНИЕ / ОТКЛОНЕНИЕ ЧЕКА (ВЫДАЧА ССЫЛКИ НА ЧАТ)
         if (cq.data.startsWith("approve_") || cq.data.startsWith("reject_")) {
             if (cq.from.id !== ADMIN_ID) {
                 await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: "⛔ Вы не админ.", show_alert: true }, BOT_TOKEN);
@@ -503,7 +510,8 @@ export default {
                 if (kv) await kv.put(`allowed_id:${targetUserId}`, "true");
                 
                 await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: "Доступ выдан ✅" }, BOT_TOKEN);
-                await callApi("sendMessage", { chat_id: targetUserId, text: `✅ <b>Оплата подтверждена!</b>\n\nВам выдан доступ. Ссылка на чат: ${CHAT_LINK}`, parse_mode: "HTML" }, BOT_TOKEN);
+                // ССЫЛКА НА ЧАТ ВЫДАЕТСЯ ТОЛЬКО ЗДЕСЬ
+                await callApi("sendMessage", { chat_id: targetUserId, text: `✅ <b>Оплата подтверждена!</b>\n\nВам выдан доступ к боту.\n\n💬 <b>Ссылка на наш чат (только для оплативших):</b>\n${CHAT_LINK}`, parse_mode: "HTML" }, BOT_TOKEN);
                 await callApi("editMessageCaption", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, caption: cq.message.caption + "\n\n✅ <b>Одобрено</b>", parse_mode: "HTML", reply_markup: { inline_keyboard: [] } }, BOT_TOKEN);
 
                 if (kv) {
@@ -512,7 +520,6 @@ export default {
                         const refPromo = "REF" + Math.random().toString(36).substring(2, 8).toUpperCase();
                         await kv.put(`promo:${refPromo}`, JSON.stringify({ discountStars: 100, discountTon: 1 }));
                         
-                        // Начисление 5 бесплатных офферов
                         let currentFree = parseInt(await kv.get(`free_offers:${referrerId}`) || '0');
                         await kv.put(`free_offers:${referrerId}`, (currentFree + 5).toString());
 
@@ -525,7 +532,7 @@ export default {
 
             } else {
                 await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: "Отклонено ❌" }, BOT_TOKEN);
-                await callApi("sendMessage", { chat_id: targetUserId, text: `❌ <b>Оплата отклонена.</b>\n\nЕсли вы уверены, что оплатили, напишите в наш чат: ${CHAT_LINK}`, parse_mode: "HTML" }, BOT_TOKEN);
+                await callApi("sendMessage", { chat_id: targetUserId, text: `❌ <b>Оплата отклонена.</b>\n\nЕсли вы уверены, что оплатили, свяжитесь с админом.`, parse_mode: "HTML" }, BOT_TOKEN);
                 await callApi("editMessageCaption", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, caption: cq.message.caption + "\n\n❌ <b>Отклонено</b>", parse_mode: "HTML", reply_markup: { inline_keyboard: [] } }, BOT_TOKEN);
             }
         }
@@ -544,15 +551,16 @@ export default {
           let startText = "";
           let startMarkup = [];
 
+          // ССЫЛКИ НА ЧАТ ЗДЕСЬ НЕТ
           if (hasAccess || freeOffers > 0) {
               startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n✅ <b>Доступ открыт!</b>\n`;
               if (freeOffers > 0) startText += `🎁 <b>Бесплатных офферов:</b> ${freeOffers}\n`;
-              startText += `\n📖 <b>Как создать оффер (пошагово):</b>\n\n1. Зайдите в профиль человека, у которого есть нужный вам подарок.\n2. Найдите этот подарок и скопируйте на него ссылку.\n3. Выйдите в любой чат и напишите:\n\n<code>@${BOT_USERNAME} [ссылка] [цена] [валюта]</code>\n\n<b>Пример:</b>\n<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>\n\n4. Нажмите на окошко, которое выскочит, и отправьте оффер.\n\n💬 <b>Наш чат:</b> ${CHAT_LINK}`;
+              startText += `\n📖 <b>Как создать оффер (пошагово):</b>\n\n1. Зайдите в профиль человека, у которого есть нужный вам подарок.\n2. Найдите этот подарок и скопируйте на него ссылку.\n3. Выйдите в любой чат и напишите:\n\n<code>@${BOT_USERNAME} [ссылка] [цена] [валюта]</code>\n\n<b>Пример:</b>\n<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>\n\n4. Нажмите на окошко, которое выскочит, и отправьте оффер.`;
               startMarkup = [
                   [{ text: "🔗 Пригласить друга", callback_data: "invite_friend" }]
               ];
           } else {
-              startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n🔒 <b>У вас нет доступа.</b>\n\nВы можете купить доступ, нажав на кнопку ниже.\n\n💬 <b>Наш чат:</b> ${CHAT_LINK}`;
+              startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n🔒 <b>У вас нет доступа.</b>\n\nВы можете купить доступ, нажав на кнопку ниже.`;
               startMarkup = [
                   [{ text: "💳 Купить доступ", callback_data: "buy_access" }],
                   [{ text: "🔗 Пригласить друга", callback_data: "invite_friend" }]
@@ -594,9 +602,8 @@ export default {
           if (action === "acc") {
             await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: `Оффер принят ✅`, show_alert: true }, BOT_TOKEN);
             
-            // Списание бесплатного оффера у создателя (если он не админ и не имеет постоянного доступа)
             if (creatorId && creatorId != ADMIN_ID && kv) {
-                const hasAccess = await checkAccess(creatorId, ""); // Проверяем, есть ли постоянный доступ
+                const hasAccess = await checkAccess(creatorId, ""); 
                 if (!hasAccess) {
                     let free = parseInt(await kv.get(`free_offers:${creatorId}`) || '0');
                     if (free > 0) await kv.put(`free_offers:${creatorId}`, (free - 1).toString());
