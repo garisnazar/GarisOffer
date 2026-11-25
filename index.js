@@ -1,6 +1,7 @@
-const ADMIN_ID = 5151757168; // Твой ID
+const ADMIN_ID = 5151757168; 
 const WEBHOOK_SECRET = "GarisOffer9231998"; 
-const TON_WALLET = "UQChRfzub4CLp2FAV998bfowFC4eE3aqIRQQeZinoajQ0oOG"; // Твой кошелек TON
+const TON_WALLET = "UQChRfzub4CLp2FAV998bfowFC4eE3aqIRQQeZinoajQ0oOG"; 
+const SUPPORT_LINK = "https://t.me/gwrex";
 
 export default {
   async fetch(request, env, ctx) {
@@ -37,8 +38,14 @@ export default {
       // ==========================================
       if (update.message && update.message.text === "/buy") {
         const chatId = update.message.chat.id;
-        const buyText = `💳 <b>Выберите способ оплаты:</b>\n\n1. <b>250 ⭐ Stars</b>\nПереведите на аккаунт: <a href="https://t.me/gwrex">@gwrex</a>\n\n2. <b>3 💎 TON</b>\nПереведите на кошелек:\n<code>${TON_WALLET}</code>\n\n<i>После перевода отправьте скриншот чека сюда.</i>`;
-        await callApi("sendMessage", { chat_id: chatId, text: buyText, parse_mode: "HTML" }, BOT_TOKEN);
+        const buyText = `💳 <b>Выберите способ оплаты:</b>\n\n1. <b>250 ⭐ Stars</b> (перевод на аккаунт)\n2. <b>3 💎 TON</b> (перевод на кошелек)\n\n<i>После выбора способа вы получите реквизиты для оплаты.</i>`;
+        const buyMarkup = {
+            inline_keyboard: [
+                [{ text: "⭐ Оплатить 250 Stars", callback_data: "pay_stars" }],
+                [{ text: "💎 Оплатить 3 TON", callback_data: "pay_ton" }]
+            ]
+        };
+        await callApi("sendMessage", { chat_id: chatId, text: buyText, parse_mode: "HTML", reply_markup: buyMarkup }, BOT_TOKEN);
       }
 
       // ==========================================
@@ -48,33 +55,26 @@ export default {
         const chatId = update.message.chat.id;
         const userId = update.message.from.id;
         const username = update.message.from.username || "no_username";
-        const photoId = update.message.photo[update.message.photo.length - 1].file_id; // Берем лучшее качество
+        const photoId = update.message.photo[update.message.photo.length - 1].file_id;
 
-        // Отправляем чек тебе (Админу) с кнопками
         const adminText = `📸 <b>Новый чек об оплате!</b>\n\n👤 От: @${username} (ID: <code>${userId}</code>)`;
-        
         const adminMarkup = {
             inline_keyboard: [
-                [
-                    { text: "✅ Принять", callback_data: `approve_${userId}` },
-                    { text: "❌ Отклонить", callback_data: `reject_${userId}` }
-                ]
+                [{ text: "✅ Принять", callback_data: `approve_${userId}` }, { text: "❌ Отклонить", callback_data: `reject_${userId}` }]
             ]
         };
 
         try {
-            // Отправляем фото тебе
             await callApi("sendPhoto", { chat_id: ADMIN_ID, photo: photoId, caption: adminText, parse_mode: "HTML", reply_markup: adminMarkup }, BOT_TOKEN);
-            // Отвечаем пользователю
-            await callApi("sendMessage", { chat_id: chatId, text: `📥 <b>Чек получен!</b>\n\nОжидайте проверки. Обычно это занимает до 24 часов.`, parse_mode: "HTML" }, BOT_TOKEN);
+            await callApi("sendMessage", { chat_id: chatId, text: `📥 <b>Чек получен!</b>\n\nОжидайте проверки.`, parse_mode: "HTML" }, BOT_TOKEN);
         } catch (e) {
-            await callApi("sendMessage", { chat_id: chatId, text: `❌ Ошибка отправки чека. Попробуйте позже.`, parse_mode: "HTML" }, BOT_TOKEN);
+            await callApi("sendMessage", { chat_id: chatId, text: `❌ Ошибка отправки чека.`, parse_mode: "HTML" }, BOT_TOKEN);
         }
         return new Response("OK", { status: 200 });
       }
 
       // ==========================================
-      // КОМАНДЫ /add, /remove И /remove all
+      // КОМАНДЫ /add, /remove, /remove all, /text, /stats
       // ==========================================
       if (update.message && (update.message.text.startsWith("/add ") || update.message.text.startsWith("/remove "))) {
         const senderId = update.message.from.id;
@@ -137,13 +137,9 @@ export default {
         return new Response("OK", { status: 200 });
       }
 
-      // ==========================================
-      // КОМАНДА /text
-      // ==========================================
       if (update.message && update.message.text.startsWith("/text ")) {
         const senderId = update.message.from.id;
         if (senderId !== ADMIN_ID) return new Response("OK", { status: 200 });
-
         const broadcastText = update.message.text.replace("/text ", "");
         if (!broadcastText) return new Response("OK", { status: 200 });
 
@@ -165,9 +161,6 @@ export default {
         return new Response("OK", { status: 200 });
       }
 
-      // ==========================================
-      // КОМАНДА /stats
-      // ==========================================
       if (update.message && update.message.text === "/stats") {
         const senderId = update.message.from.id;
         const chatId = update.message.chat.id;
@@ -215,14 +208,16 @@ export default {
         let startMarkup = {};
 
         if (hasAccess) {
-            startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n✅ <b>У вас есть доступ к созданию офферов!</b>\n\n📖 <b>Как кидать офферы:</b>\nНапишите в любом чате:\n<code>@GarisOfferRobot t.me/nft/... 500 stars ru</code>`;
-            startMarkup = { inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]] };
+            // ДЛЯ ТЕХ У КОГО ЕСТЬ ДОСТУП (БЕЗ КНОПКИ)
+            startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n✅ <b>У вас есть доступ к созданию офферов!</b>\n\n📖 <b>Как кидать офферы:</b>\nНапишите в любом чате:\n<code>@GarisOfferRobot t.me/nft/... 500 stars ru</code>\n\n👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
+            // Кнопки нет, отправляем просто текст
+            await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", disable_web_page_preview: true }, BOT_TOKEN);
         } else {
-            startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n🔒 <b>У вас нет доступа.</b>\n\nВы можете купить доступ, нажав на кнопку ниже.`;
+            // ДЛЯ ТЕХ У КОГО НЕТ ДОСТУПА (С КНОПКОЙ ОПЛАТЫ)
+            startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n🔒 <b>У вас нет доступа.</b>\n\nВы можете купить доступ, нажав на кнопку ниже.\n\n👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
             startMarkup = { inline_keyboard: [[{ text: "💳 Купить доступ", callback_data: "buy_access" }]] };
+            await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup, disable_web_page_preview: true }, BOT_TOKEN);
         }
-
-        await callApi("sendMessage", { chat_id: chatId, text: startText, parse_mode: "HTML", reply_markup: startMarkup }, BOT_TOKEN);
       }
 
       // --- INLINE-ЗАПРОСЫ ---
@@ -293,17 +288,34 @@ export default {
       if (update.callback_query) {
         const cq = update.callback_query;
         
-        // КНОПКА КУПИТЬ ДОСТУП
         if (cq.data === "buy_access") {
             await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
             const chatId = cq.message.chat.id;
-            const buyText = `💳 <b>Выберите способ оплаты:</b>\n\n1. <b>250 ⭐ Stars</b>\nПереведите на аккаунт: <a href="https://t.me/gwrex">@gwrex</a>\n\n2. <b>3 💎 TON</b>\nПереведите на кошелек:\n<code>${TON_WALLET}</code>\n\n<i>После перевода отправьте скриншот чека сюда.</i>`;
-            await callApi("sendMessage", { chat_id: chatId, text: buyText, parse_mode: "HTML" }, BOT_TOKEN);
+            const buyText = `💳 <b>Выберите способ оплаты:</b>\n\n1. <b>250 ⭐ Stars</b> (перевод на аккаунт)\n2. <b>3 💎 TON</b> (перевод на кошелек)\n\n<i>После выбора способа вы получите реквизиты для оплаты.</i>`;
+            const buyMarkup = {
+                inline_keyboard: [
+                    [{ text: "⭐ Оплатить 250 Stars", callback_data: "pay_stars" }],
+                    [{ text: "💎 Оплатить 3 TON", callback_data: "pay_ton" }]
+                ]
+            };
+            await callApi("sendMessage", { chat_id: chatId, text: buyText, parse_mode: "HTML", reply_markup: buyMarkup }, BOT_TOKEN);
         }
 
-        // ОДОБРЕНИЕ ИЛИ ОТКЛОНЕНИЕ ЧЕКА
+        if (cq.data === "pay_stars") {
+            await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
+            const chatId = cq.message.chat.id;
+            const text = `⭐ <b>Оплата 250 Stars</b>\n\nПереведите 250 звезд на аккаунт: <a href="${SUPPORT_LINK}">клик</a>\n\nПосле перевода отправьте скриншот чека сюда.`;
+            await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML", disable_web_page_preview: true }, BOT_TOKEN);
+        }
+
+        if (cq.data === "pay_ton") {
+            await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
+            const chatId = cq.message.chat.id;
+            const text = `💎 <b>Оплата 3 TON</b>\n\nПереведите 3 TON на кошелек:\n<code>${TON_WALLET}</code>\n\nПосле перевода отправьте скриншот чека сюда.`;
+            await callApi("sendMessage", { chat_id: chatId, text: text, parse_mode: "HTML" }, BOT_TOKEN);
+        }
+
         if (cq.data.startsWith("approve_") || cq.data.startsWith("reject_")) {
-            // Проверяем, что нажал именно админ
             if (cq.from.id !== ADMIN_ID) {
                 await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: "⛔ Вы не админ.", show_alert: true }, BOT_TOKEN);
                 return new Response("OK", { status: 200 });
@@ -316,20 +328,12 @@ export default {
                 if (kv) await kv.put(`allowed_id:${targetUserId}`, "true");
                 await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: "Доступ выдан ✅" }, BOT_TOKEN);
                 await callApi("sendMessage", { chat_id: targetUserId, text: `✅ <b>Оплата подтверждена!</b>\n\nВам выдан доступ. Теперь вы можете создавать офферы.`, parse_mode: "HTML" }, BOT_TOKEN);
-                // Меняем сообщение у админа
                 await callApi("editMessageCaption", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, caption: cq.message.caption + "\n\n✅ <b>Одобрено</b>", parse_mode: "HTML", reply_markup: { inline_keyboard: [] } }, BOT_TOKEN);
             } else {
                 await callApi("answerCallbackQuery", { callback_query_id: cq.id, text: "Отклонено ❌" }, BOT_TOKEN);
                 await callApi("sendMessage", { chat_id: targetUserId, text: `❌ <b>Оплата отклонена.</b>\n\nЕсли вы уверены, что оплатили, свяжитесь с админом.`, parse_mode: "HTML" }, BOT_TOKEN);
                 await callApi("editMessageCaption", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, caption: cq.message.caption + "\n\n❌ <b>Отклонено</b>", parse_mode: "HTML", reply_markup: { inline_keyboard: [] } }, BOT_TOKEN);
             }
-        }
-
-        if (cq.data === "how_to_accept") {
-          await callApi("answerCallbackQuery", { callback_query_id: cq.id }, BOT_TOKEN);
-          const instructionText = `🎁 <b>Инструкция:</b>\n\n1. Нажмите «Принять».\n2. Нажмите «Передать подарок».\n3. Отправьте подарок.\n4. Оплата придет автоматически.`;
-          const backMarkup = { inline_keyboard: [[{ text: "Назад", callback_data: "back_to_start" }]] };
-          try { await callApi("editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: instructionText, parse_mode: "HTML", reply_markup: backMarkup, disable_web_page_preview: true }, BOT_TOKEN); } catch (e) {}
         }
 
         if (cq.data === "back_to_start") {
@@ -342,14 +346,13 @@ export default {
           let startMarkup = {};
 
           if (hasAccess) {
-              startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n✅ <b>У вас есть доступ к созданию офферов!</b>\n\n📖 <b>Как кидать офферы:</b>\nНапишите в любом чате:\n<code>@GarisOfferRobot t.me/nft/... 500 stars ru</code>`;
-              startMarkup = { inline_keyboard: [[{ text: "❓ Как принять оффер?", callback_data: "how_to_accept" }]] };
+              startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n✅ <b>У вас есть доступ к созданию офферов!</b>\n\n📖 <b>Как кидать офферы:</b>\nНапишите в любом чате:\n<code>@GarisOfferRobot t.me/nft/... 500 stars ru</code>\n\n👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
+              await callApi("editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: startText, parse_mode: "HTML", disable_web_page_preview: true }, BOT_TOKEN);
           } else {
-              startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n🔒 <b>У вас нет доступа.</b>\n\nВы можете купить доступ, нажав на кнопку ниже.`;
+              startText = `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n🔒 <b>У вас нет доступа.</b>\n\nВы можете купить доступ, нажав на кнопку ниже.\n\n👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
               startMarkup = { inline_keyboard: [[{ text: "💳 Купить доступ", callback_data: "buy_access" }]] };
+              await callApi("editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: startText, parse_mode: "HTML", reply_markup: startMarkup, disable_web_page_preview: true }, BOT_TOKEN);
           }
-
-          try { await callApi("editMessageText", { chat_id: cq.message.chat.id, message_id: cq.message.message_id, text: startText, parse_mode: "HTML", reply_markup: startMarkup, disable_web_page_preview: true }, BOT_TOKEN); } catch (e) {}
         }
 
         if (cq.data.startsWith("acc") || cq.data.startsWith("dec")) {
