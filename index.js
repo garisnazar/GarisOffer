@@ -11,12 +11,21 @@ export default {
     const BOT_TOKEN = env.BOT_TOKEN;
     const kv = env.USERS_KV;
 
-    if (!BOT_TOKEN) return new Response("Bot token is not configured", { status: 500 });
+    if (!BOT_TOKEN) {
+      return new Response("Bot token is not configured", { status: 500 });
+    }
 
-    const secretHeader = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
-    if (secretHeader !== WEBHOOK_SECRET) return new Response("Forbidden", { status: 403 });
+    const secretHeader = request.headers.get(
+      "X-Telegram-Bot-Api-Secret-Token"
+    );
 
-    if (request.method !== "POST") return new Response("OK", { status: 200 });
+    if (secretHeader !== WEBHOOK_SECRET) {
+      return new Response("Forbidden", { status: 403 });
+    }
+
+    if (request.method !== "POST") {
+      return new Response("OK", { status: 200 });
+    }
 
     try {
       const update = await request.json();
@@ -29,7 +38,12 @@ export default {
           }, BOT_TOKEN);
 
           if (!res.ok) return false;
-          return ["creator", "administrator", "member"].includes(res.result.status);
+
+          return [
+            "creator",
+            "administrator",
+            "member"
+          ].includes(res.result.status);
         } catch (e) {
           return false;
         }
@@ -43,11 +57,193 @@ export default {
         if (byId) return true;
 
         if (username) {
-          const byName = await kv.get(`allowed_username:${username.toLowerCase()}`);
+          const byName = await kv.get(
+            `allowed_username:${username.toLowerCase()}`
+          );
+
           if (byName) return true;
         }
 
         return false;
+      }
+
+      async function answerCallback(callbackId, text = "", alert = false) {
+        try {
+          await callApi("answerCallbackQuery", {
+            callback_query_id: callbackId,
+            text,
+            show_alert: alert
+          }, BOT_TOKEN);
+        } catch (e) {}
+      }
+
+      // ==========================================
+      // ПРОМОКОДЫ: УДАЛЕНИЕ С ИСТОРИЕЙ ИСПОЛЬЗОВАНИЙ
+      // ==========================================
+
+      async function deletePromoCompletely(code) {
+        if (!kv) return;
+
+        await kv.delete(`promo:${code}`);
+
+        let cursor;
+
+        do {
+          const list = await kv.list({
+            prefix: `promo_used:${code}:`,
+            cursor
+          });
+
+          for (const key of list.keys) {
+            await kv.delete(key.name);
+          }
+
+          cursor = list.cursor;
+        } while (cursor);
+      }
+
+      // ==========================================
+      // ПРОМОКОДЫ: СПИСОК ДЛЯ АДМИНА
+      // ==========================================
+
+      async function showPromos(chatId, page = 0, messageId = null) {
+        if (!kv) return;
+
+        const allPromos = [];
+        let cursor;
+
+        do {
+          const list = await kv.list({
+            prefix: "promo:",
+            cursor
+          });
+
+          for (const key of list.keys) {
+            const code = key.name.replace("promo:", "");
+            const data = await kv.get(key.name);
+
+            if (!data) continue;
+
+            try {
+              allPromos.push({
+                code,
+                promo: JSON.parse(data)
+              });
+            } catch (e) {
+              console.error("Ошибка чтения промокода:", code);
+            }
+          }
+
+          cursor = list.cursor;
+        } while (cursor);
+
+        allPromos.sort((a, b) => a.code.localeCompare(b.code));
+
+        const perPage = 5;
+        const totalPages = Math.max(
+          1,
+          Math.ceil(allPromos.length / perPage)
+        );
+
+        page = Math.max(0, Math.min(page, totalPages - 1));
+
+        const start = page * perPage;
+        const current = allPromos.slice(start, start + perPage);
+
+        let text =
+          `🎟 <b>УПРАВЛЕНИЕ ПРОМОКОДАМИ</b>\n\n` +
+          `Всего промокодов: <b>${allPromos.length}</b>\n` +
+          `Страница: <b>${page + 1}/${totalPages}</b>\n\n`;
+
+        const keyboard = [];
+
+        if (current.length === 0) {
+          text += "📭 <i>Промокодов пока нет.</i>";
+        }
+
+        for (const item of current) {
+          const p = item.promo;
+
+          let reward = "Неизвестная награда";
+
+          if (p.rewardType === "permanent") {
+            reward = "♾ Бессрочный доступ";
+          } else if (p.rewardType === "stars") {
+            reward = `⭐ Скидка ${p.rewardValue} Stars`;
+          } else if (p.rewardType === "ton") {
+            reward = `💎 Скидка ${p.rewardValue} TON`;
+          } else if (
+            p.discountStars !== undefined ||
+            p.discountTon !== undefined
+          ) {
+            reward =
+              `⭐ ${p.discountStars || 0} Stars` +
+              ` / 💎 ${p.discountTon || 0} TON`;
+          }
+
+          const uses = Number(p.uses || 0);
+          const maxUses = Number(p.maxUses || 0);
+
+          const limitText = maxUses === 0
+            ? "♾ Без ограничений"
+            : `${uses}/${maxUses}`;
+
+          text +=
+            `🎁 <b>${item.code}</b>\n` +
+            `Награда: ${reward}\n` +
+            `Использовано: ${limitText}\n\n`;
+
+          keyboard.push([{
+            text: `🗑 Удалить ${item.code}`,
+            callback_data: `promodel|${item.code}|${page}`
+          }]);
+        }
+
+        const navigation = [];
+
+        if (page > 0) {
+          navigation.push({
+            text: "⬅️ Назад",
+            callback_data: `promolist|${page - 1}`
+          });
+        }
+
+        if (page < totalPages - 1) {
+          navigation.push({
+            text: "Вперёд ➡️",
+            callback_data: `promolist|${page + 1}`
+          });
+        }
+
+        if (navigation.length) {
+          keyboard.push(navigation);
+        }
+
+        const markup = {
+          inline_keyboard: keyboard
+        };
+
+        if (messageId) {
+          try {
+            await callApi("editMessageText", {
+              chat_id: chatId,
+              message_id: messageId,
+              text,
+              parse_mode: "HTML",
+              reply_markup: markup
+            }, BOT_TOKEN);
+            return;
+          } catch (e) {
+            console.error("Не удалось обновить список промокодов:", e.message);
+          }
+        }
+
+        await callApi("sendMessage", {
+          chat_id: chatId,
+          text,
+          parse_mode: "HTML",
+          reply_markup: markup
+        }, BOT_TOKEN);
       }
 
       // ==========================================
@@ -66,14 +262,15 @@ export default {
       }
 
       // ==========================================
-      // ОБРАБОТКА ЧЕКОВ (ВЫШЕ ОСТАЛЬНЫХ КОМАНД)
+      // ОБРАБОТКА ЧЕКОВ
       // ==========================================
 
       if (update.message?.photo) {
         const chatId = update.message.chat.id;
         const userId = update.message.from.id;
         const username = update.message.from.username || "без username";
-        const photoId = update.message.photo[update.message.photo.length - 1].file_id;
+        const photoId =
+          update.message.photo[update.message.photo.length - 1].file_id;
 
         const adminText =
           `📸 <b>НОВЫЙ ЧЕК ОБ ОПЛАТЕ!</b>\n\n` +
@@ -82,12 +279,16 @@ export default {
           `💬 Чат: <code>${chatId}</code>`;
 
         const adminMarkup = {
-          inline_keyboard: [
-            [
-              { text: "✅ Принять", callback_data: `approve_${userId}` },
-              { text: "❌ Отклонить", callback_data: `reject_${userId}` }
-            ]
-          ]
+          inline_keyboard: [[
+            {
+              text: "✅ Принять",
+              callback_data: `approve_${userId}`
+            },
+            {
+              text: "❌ Отклонить",
+              callback_data: `reject_${userId}`
+            }
+          ]]
         };
 
         try {
@@ -101,7 +302,9 @@ export default {
 
           await callApi("sendMessage", {
             chat_id: chatId,
-            text: "📥 <b>Чек успешно отправлен администратору!</b>\n\n⏳ Ожидайте проверки оплаты.",
+            text:
+              "📥 <b>Чек успешно отправлен администратору!</b>\n\n" +
+              "⏳ Ожидайте проверки оплаты.",
             parse_mode: "HTML"
           }, BOT_TOKEN);
 
@@ -111,11 +314,16 @@ export default {
           try {
             await callApi("sendMessage", {
               chat_id: chatId,
-              text: "❌ Не удалось отправить чек администратору. Обратитесь в поддержку.",
+              text:
+                "❌ Не удалось отправить чек администратору. " +
+                "Обратитесь в поддержку.",
               parse_mode: "HTML"
             }, BOT_TOKEN);
           } catch (sendError) {
-            console.error("Не удалось сообщить пользователю:", sendError.message);
+            console.error(
+              "Не удалось сообщить пользователю:",
+              sendError.message
+            );
           }
         }
 
@@ -127,20 +335,28 @@ export default {
       // ==========================================
 
       if (update.message?.text?.startsWith("/setprice ")) {
-        if (update.message.from.id !== ADMIN_ID) return new Response("OK");
+        if (update.message.from.id !== ADMIN_ID) {
+          return new Response("OK");
+        }
 
-        const args = update.message.text.split(" ");
+        const args = update.message.text.split(/\s+/);
+
         if (args.length < 3) return new Response("OK");
 
         const stars = parseInt(args[1]);
         const ton = parseFloat(args[2]);
 
-        if (!Number.isFinite(stars) || stars < 0 ||
-            !Number.isFinite(ton) || ton < 0) {
+        if (
+          !Number.isFinite(stars) ||
+          stars < 0 ||
+          !Number.isFinite(ton) ||
+          ton < 0
+        ) {
           await callApi("sendMessage", {
             chat_id: update.message.chat.id,
             text: "❌ Неверные цены. Пример: /setprice 250 3"
           }, BOT_TOKEN);
+
           return new Response("OK");
         }
 
@@ -150,7 +366,11 @@ export default {
 
           await callApi("sendMessage", {
             chat_id: update.message.chat.id,
-            text: `✅ Цены обновлены!\n\n⭐ Stars: ${stars}\n💎 TON: ${ton}`
+            text:
+              `✅ <b>Цены обновлены!</b>\n\n` +
+              `⭐ Stars: ${stars}\n` +
+              `💎 TON: ${ton}`,
+            parse_mode: "HTML"
           }, BOT_TOKEN);
         }
 
@@ -158,36 +378,182 @@ export default {
       }
 
       // ==========================================
-      // АДМИН: /newpromo
+      // АДМИН: /createpromo
+      // Формат:
+      // /createpromo "CODE" "50 stars" "100"
+      // /createpromo "VIP2027" "навсегда" "50"
+      // 0 = без ограничений
       // ==========================================
 
-      if (update.message?.text?.startsWith("/newpromo ")) {
-        if (update.message.from.id !== ADMIN_ID) return new Response("OK");
-
-        const args = update.message.text.split(" ");
-        if (args.length < 3) return new Response("OK");
-
-        const discountStars = parseInt(args[1]);
-        const discountTon = parseFloat(args[2]);
-
-        if (!Number.isFinite(discountStars) || !Number.isFinite(discountTon)) {
+      if (update.message?.text?.startsWith("/createpromo")) {
+        if (update.message.from.id !== ADMIN_ID) {
           return new Response("OK");
         }
 
-        const promoCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+        if (!kv) return new Response("OK");
 
-        if (kv) {
-          await kv.put(`promo:${promoCode}`, JSON.stringify({
-            discountStars,
-            discountTon
-          }));
+        const chatId = update.message.chat.id;
+        const match = update.message.text.match(
+          /^\/createpromo(?:@\w+)?\s+"([^"]+)"\s+"([^"]+)"\s+"(\d+)"$/i
+        );
 
+        if (!match) {
           await callApi("sendMessage", {
-            chat_id: update.message.chat.id,
-            text: `✅ Промокод создан!\n\nКод: <code>${promoCode}</code>\nСкидка: ${discountStars} Stars или ${discountTon} TON`,
+            chat_id: chatId,
+            text:
+              `🎟 <b>СОЗДАНИЕ ПРОМОКОДА</b>\n\n` +
+              `Формат команды:\n` +
+              `<code>/createpromo "КОД" "НАГРАДА" "ЛИМИТ"</code>\n\n` +
+              `<b>Примеры:</b>\n` +
+              `<code>/createpromo "NEWYEAR2027" "50 stars" "100"</code>\n` +
+              `<code>/createpromo "VIP2027" "0.5 ton" "50"</code>\n` +
+              `<code>/createpromo "FOREVER" "навсегда" "10"</code>\n\n` +
+              `⭐ Stars — скидка в Stars\n` +
+              `💎 TON — скидка в TON\n` +
+              `♾ Навсегда — постоянный доступ\n\n` +
+              `Лимит 0 означает бесконечное количество использований.`,
             parse_mode: "HTML"
           }, BOT_TOKEN);
+
+          return new Response("OK");
         }
+
+        const promoCode = match[1].trim().toUpperCase();
+        const rewardText = match[2].trim().toLowerCase();
+        const maxUses = Number(match[3]);
+
+        if (!/^[A-Z0-9_-]{3,32}$/.test(promoCode)) {
+          await callApi("sendMessage", {
+            chat_id: chatId,
+            text: "❌ Код должен содержать 3–32 символа: A–Z, 0–9, _ или -."
+          }, BOT_TOKEN);
+
+          return new Response("OK");
+        }
+
+        if (!Number.isSafeInteger(maxUses) || maxUses < 0) {
+          await callApi("sendMessage", {
+            chat_id: chatId,
+            text: "❌ Неверный лимит использований."
+          }, BOT_TOKEN);
+
+          return new Response("OK");
+        }
+
+        const existing = await kv.get(`promo:${promoCode}`);
+
+        if (existing) {
+          await callApi("sendMessage", {
+            chat_id: chatId,
+            text: `⚠️ Промокод <code>${promoCode}</code> уже существует.`,
+            parse_mode: "HTML"
+          }, BOT_TOKEN);
+
+          return new Response("OK");
+        }
+
+        const promo = {
+          code: promoCode,
+          maxUses,
+          uses: 0,
+          rewardType: "",
+          rewardValue: 0,
+          createdAt: Date.now()
+        };
+
+        const permanentWords = [
+          "навсегда",
+          "бессрочно",
+          "вечный доступ",
+          "бесконечный доступ"
+        ];
+
+        if (permanentWords.includes(rewardText)) {
+          promo.rewardType = "permanent";
+        } else {
+          const rewardMatch = rewardText.match(
+            /^(\d+(?:[.,]\d+)?)\s*(stars?|звезд|звёзд|ton)$/i
+          );
+
+          if (!rewardMatch) {
+            await callApi("sendMessage", {
+              chat_id: chatId,
+              text:
+                "❌ Неизвестная награда.\n\n" +
+                "Используй, например: 50 stars, 0.5 ton или навсегда."
+            }, BOT_TOKEN);
+
+            return new Response("OK");
+          }
+
+          const rewardValue = Number(
+            rewardMatch[1].replace(",", ".")
+          );
+
+          if (!Number.isFinite(rewardValue) || rewardValue <= 0) {
+            await callApi("sendMessage", {
+              chat_id: chatId,
+              text: "❌ Размер скидки должен быть больше нуля."
+            }, BOT_TOKEN);
+
+            return new Response("OK");
+          }
+
+          if (rewardMatch[2].toLowerCase().startsWith("ton")) {
+            promo.rewardType = "ton";
+          } else {
+            promo.rewardType = "stars";
+          }
+
+          promo.rewardValue = rewardValue;
+        }
+
+        await kv.put(
+          `promo:${promoCode}`,
+          JSON.stringify(promo)
+        );
+
+        let rewardDescription = "";
+
+        if (promo.rewardType === "permanent") {
+          rewardDescription = "♾ Бессрочный доступ";
+        } else if (promo.rewardType === "stars") {
+          rewardDescription = `⭐ Скидка ${promo.rewardValue} Stars`;
+        } else {
+          rewardDescription = `💎 Скидка ${promo.rewardValue} TON`;
+        }
+
+        await callApi("sendMessage", {
+          chat_id: chatId,
+          text:
+            `✅ <b>ПРОМОКОД СОЗДАН!</b>\n\n` +
+            `🎟 Код: <code>${promoCode}</code>\n` +
+            `🎁 Награда: ${rewardDescription}\n` +
+            `👥 Лимит: ${maxUses === 0 ? "♾ Без ограничений" : maxUses}\n` +
+            `📊 Использовано: 0\n\n` +
+            `Пользователи могут активировать его командой:\n` +
+            `<code>/promo ${promoCode}</code>`,
+          parse_mode: "HTML"
+        }, BOT_TOKEN);
+
+        return new Response("OK");
+      }
+
+      // ==========================================
+      // АДМИН: /promos
+      // ==========================================
+
+      if (
+        update.message?.text === "/promos" ||
+        update.message?.text?.startsWith("/promos@")
+      ) {
+        if (update.message.from.id !== ADMIN_ID) {
+          return new Response("OK");
+        }
+
+        if (!kv) return new Response("OK");
+
+        await showPromos(update.message.chat.id, 0);
 
         return new Response("OK");
       }
@@ -197,22 +563,36 @@ export default {
       // ==========================================
 
       if (update.message?.text?.startsWith("/deletepromo ")) {
-        if (update.message.from.id !== ADMIN_ID) return new Response("OK");
+        if (update.message.from.id !== ADMIN_ID) {
+          return new Response("OK");
+        }
 
-        const args = update.message.text.split(" ");
-        if (args.length < 2) return new Response("OK");
+        if (!kv) return new Response("OK");
 
-        const promoCode = args[1].toUpperCase();
+        const promoCode = update.message.text
+          .split(/\s+/)[1]
+          ?.toUpperCase();
 
-        if (kv) {
-          await kv.delete(`promo:${promoCode}`);
+        if (!promoCode) return new Response("OK");
 
+        const existing = await kv.get(`promo:${promoCode}`);
+
+        if (!existing) {
           await callApi("sendMessage", {
             chat_id: update.message.chat.id,
-            text: `🗑 Промокод <code>${promoCode}</code> удален.`,
-            parse_mode: "HTML"
+            text: `❌ Промокод ${promoCode} не найден.`
           }, BOT_TOKEN);
+
+          return new Response("OK");
         }
+
+        await deletePromoCompletely(promoCode);
+
+        await callApi("sendMessage", {
+          chat_id: update.message.chat.id,
+          text: `🗑 Промокод <code>${promoCode}</code> и история его использований удалены.`,
+          parse_mode: "HTML"
+        }, BOT_TOKEN);
 
         return new Response("OK");
       }
@@ -223,39 +603,150 @@ export default {
 
       if (update.message?.text?.startsWith("/promo ")) {
         const chatId = update.message.chat.id;
-        const promoCode = update.message.text.replace("/promo ", "").toUpperCase().trim();
+        const userId = update.message.from.id;
+        const promoCode = update.message.text
+          .replace(/^\/promo(?:@\w+)?\s+/i, "")
+          .trim()
+          .toUpperCase();
 
         if (!kv) return new Response("OK");
 
-        const promoData = await kv.get(`promo:${promoCode}`);
-
-        if (promoData) {
-          const promo = JSON.parse(promoData);
-          const newStars = Math.max(0, BASE_STARS_PRICE - promo.discountStars);
-          const newTon = Math.max(0, BASE_TON_PRICE - promo.discountTon).toFixed(2);
-
-          const text = `✅ <b>Промокод применен!</b>\n\nВаша цена:\n⭐ <b>${newStars} Stars</b>\n💎 <b>${newTon} TON</b>\n\nВыберите способ оплаты:`;
-
-          const markup = {
-            inline_keyboard: [
-              [{ text: `⭐ Оплатить ${newStars} Stars`, callback_data: `pay_promo_stars_${newStars}` }],
-              [{ text: `💎 Оплатить ${newTon} TON`, callback_data: `pay_promo_ton_${newTon}` }]
-            ]
-          };
-
+        if (!/^[A-Z0-9_-]{3,32}$/.test(promoCode)) {
           await callApi("sendMessage", {
             chat_id: chatId,
-            text,
-            parse_mode: "HTML",
-            reply_markup: markup
+            text: "❌ Неверный формат промокода."
           }, BOT_TOKEN);
 
-        } else {
+          return new Response("OK");
+        }
+
+        const promoData = await kv.get(`promo:${promoCode}`);
+
+        if (!promoData) {
           await callApi("sendMessage", {
             chat_id: chatId,
             text: "❌ Промокод не найден или недействителен."
           }, BOT_TOKEN);
+
+          return new Response("OK");
         }
+
+        const promo = JSON.parse(promoData);
+        const usedKey = `promo_used:${promoCode}:${userId}`;
+
+        if (await kv.get(usedKey)) {
+          await callApi("sendMessage", {
+            chat_id: chatId,
+            text: "⚠️ Вы уже использовали этот промокод."
+          }, BOT_TOKEN);
+
+          return new Response("OK");
+        }
+
+        const uses = Number(promo.uses || 0);
+        const maxUses = Number(promo.maxUses || 0);
+
+        if (maxUses > 0 && uses >= maxUses) {
+          await callApi("sendMessage", {
+            chat_id: chatId,
+            text: "❌ Лимит использований этого промокода исчерпан."
+          }, BOT_TOKEN);
+
+          return new Response("OK");
+        }
+
+        // БЕССРОЧНЫЙ ДОСТУП
+
+        if (promo.rewardType === "permanent") {
+          await kv.put(usedKey, "true");
+
+          await kv.put(
+            `allowed_id:${userId}`,
+            "true"
+          );
+
+          promo.uses = uses + 1;
+
+          await kv.put(
+            `promo:${promoCode}`,
+            JSON.stringify(promo)
+          );
+
+          await callApi("sendMessage", {
+            chat_id: chatId,
+            text:
+              `🎉 <b>ПРОМОКОД АКТИВИРОВАН!</b>\n\n` +
+              `🎟 Код: <code>${promoCode}</code>\n` +
+              `♾ Вам выдан <b>бессрочный доступ</b> к созданию офферов!\n\n` +
+              `Нажмите /start, чтобы открыть меню.`,
+            parse_mode: "HTML"
+          }, BOT_TOKEN);
+
+          return new Response("OK");
+        }
+
+        // СКИДКИ STARS / TON
+        // Старые реферальные промокоды discountStars/discountTon
+        // также остаются совместимыми.
+
+        let discountStars = 0;
+        let discountTon = 0;
+
+        if (promo.rewardType === "stars") {
+          discountStars = Number(promo.rewardValue || 0);
+        } else if (promo.rewardType === "ton") {
+          discountTon = Number(promo.rewardValue || 0);
+        } else {
+          discountStars = Number(promo.discountStars || 0);
+          discountTon = Number(promo.discountTon || 0);
+        }
+
+        const newStars = Math.max(
+          0,
+          BASE_STARS_PRICE - discountStars
+        );
+
+        const newTon = Math.max(
+          0,
+          BASE_TON_PRICE - discountTon
+        ).toFixed(2);
+
+        await kv.put(usedKey, "true");
+
+        promo.uses = uses + 1;
+
+        await kv.put(
+          `promo:${promoCode}`,
+          JSON.stringify(promo)
+        );
+
+        const text =
+          `✅ <b>ПРОМОКОД ПРИМЕНЁН!</b>\n\n` +
+          `🎟 Код: <code>${promoCode}</code>\n\n` +
+          `💳 <b>Ваши цены:</b>\n` +
+          `⭐ Stars: <b>${newStars}</b>\n` +
+          `💎 TON: <b>${newTon}</b>\n\n` +
+          `Выберите способ оплаты:`;
+
+        const markup = {
+          inline_keyboard: [
+            [{
+              text: `⭐ Оплатить ${newStars} Stars`,
+              callback_data: `pay_promo_stars_${newStars}`
+            }],
+            [{
+              text: `💎 Оплатить ${newTon} TON`,
+              callback_data: `pay_promo_ton_${newTon}`
+            }]
+          ]
+        };
+
+        await callApi("sendMessage", {
+          chat_id: chatId,
+          text,
+          parse_mode: "HTML",
+          reply_markup: markup
+        }, BOT_TOKEN);
 
         return new Response("OK");
       }
@@ -264,21 +755,28 @@ export default {
       // АДМИН: /add и /remove
       // ==========================================
 
-      if (update.message?.text?.startsWith("/add ") ||
-          update.message?.text?.startsWith("/remove ")) {
-
+      if (
+        update.message?.text?.startsWith("/add ") ||
+        update.message?.text?.startsWith("/remove ")
+      ) {
         const senderId = update.message.from.id;
 
-        if (senderId !== ADMIN_ID) return new Response("OK");
+        if (senderId !== ADMIN_ID) {
+          return new Response("OK");
+        }
+
         if (!kv) return new Response("OK");
 
-        const args = update.message.text.split(" ");
+        const args = update.message.text.split(/\s+/);
         const command = args[0];
         const targetUser = args[1];
 
         if (!targetUser) return new Response("OK");
 
-        if (command === "/remove" && targetUser.toLowerCase() === "all") {
+        if (
+          command === "/remove" &&
+          targetUser.toLowerCase() === "all"
+        ) {
           try {
             let cursor;
             const keysToDelete = [];
@@ -287,8 +785,10 @@ export default {
               const list = await kv.list({ cursor });
 
               for (const key of list.keys) {
-                if (key.name.startsWith("allowed_") &&
-                    key.name !== `allowed_id:${ADMIN_ID}`) {
+                if (
+                  key.name.startsWith("allowed_") &&
+                  key.name !== `allowed_id:${ADMIN_ID}`
+                ) {
                   keysToDelete.push(key.name);
                 }
               }
@@ -315,17 +815,31 @@ export default {
 
         if (command === "/add") {
           if (targetUser.startsWith("@")) {
-            const uname = targetUser.slice(1).toLowerCase();
-            const userId = await kv.get(`username_id:${uname}`);
+            const uname = targetUser
+              .slice(1)
+              .toLowerCase();
+
+            const userId = await kv.get(
+              `username_id:${uname}`
+            );
 
             if (!userId) {
               await callApi("sendMessage", {
                 chat_id: update.message.chat.id,
-                text: "⚠️ Пользователь не найден. Пусть сначала нажмет /start."
+                text:
+                  "⚠️ Пользователь не найден. " +
+                  "Пусть сначала нажмёт /start."
               }, BOT_TOKEN);
             } else {
-              await kv.put(`allowed_username:${uname}`, "true");
-              await kv.put(`allowed_id:${userId}`, "true");
+              await kv.put(
+                `allowed_username:${uname}`,
+                "true"
+              );
+
+              await kv.put(
+                `allowed_id:${userId}`,
+                "true"
+              );
 
               await callApi("sendMessage", {
                 chat_id: update.message.chat.id,
@@ -333,9 +847,11 @@ export default {
                 parse_mode: "HTML"
               }, BOT_TOKEN);
             }
-
           } else {
-            await kv.put(`allowed_id:${targetUser}`, "true");
+            await kv.put(
+              `allowed_id:${targetUser}`,
+              "true"
+            );
 
             await callApi("sendMessage", {
               chat_id: update.message.chat.id,
@@ -346,7 +862,9 @@ export default {
 
         } else if (command === "/remove") {
           if (targetUser.startsWith("@")) {
-            await kv.delete(`allowed_username:${targetUser.slice(1).toLowerCase()}`);
+            await kv.delete(
+              `allowed_username:${targetUser.slice(1).toLowerCase()}`
+            );
           } else {
             await kv.delete(`allowed_id:${targetUser}`);
           }
@@ -365,18 +883,27 @@ export default {
       // ==========================================
 
       if (update.message?.text?.startsWith("/text ")) {
-        if (update.message.from.id !== ADMIN_ID) return new Response("OK");
+        if (update.message.from.id !== ADMIN_ID) {
+          return new Response("OK");
+        }
 
         if (!kv) return new Response("OK");
 
-        const broadcastText = update.message.text.replace("/text ", "");
+        const broadcastText = update.message.text.replace(
+          /^\/text\s+/,
+          ""
+        );
+
         if (!broadcastText) return new Response("OK");
 
         let cursor;
-        let users = [];
+        const users = [];
 
         do {
-          const list = await kv.list({ cursor, prefix: "user:" });
+          const list = await kv.list({
+            cursor,
+            prefix: "user:"
+          });
 
           for (const key of list.keys) {
             users.push(key.name.replace("user:", ""));
@@ -404,7 +931,10 @@ export default {
 
         await callApi("sendMessage", {
           chat_id: update.message.chat.id,
-          text: `✅ Рассылка завершена.\n\n📨 Доставлено: ${delivered}\n❌ Ошибок: ${failed}`
+          text:
+            `✅ Рассылка завершена.\n\n` +
+            `📨 Доставлено: ${delivered}\n` +
+            `❌ Ошибок: ${failed}`
         }, BOT_TOKEN);
 
         return new Response("OK");
@@ -418,7 +948,10 @@ export default {
         const senderId = update.message.from.id;
         const chatId = update.message.chat.id;
 
-        if (senderId !== ADMIN_ID) return new Response("OK");
+        if (senderId !== ADMIN_ID) {
+          return new Response("OK");
+        }
+
         if (!kv) return new Response("OK");
 
         let cursor;
@@ -435,7 +968,9 @@ export default {
 
             if (key.name.startsWith("allowed_id:")) {
               const userId = key.name.replace("allowed_id:", "");
-              const username = await kv.get(`user:${userId}`) || "нет_в_базе";
+              const username =
+                await kv.get(`user:${userId}`) || "нет_в_базе";
+
               accessList.push(`@${username} (${userId})`);
             }
           }
@@ -450,7 +985,8 @@ export default {
           `📦 Офферов: ${totalOffers}\n\n`;
 
         if (accessList.length > 0) {
-          statsText += `📋 <b>Доступ:</b>\n${accessList.join("\n")}`;
+          statsText +=
+            `📋 <b>Доступ:</b>\n${accessList.join("\n")}`;
         }
 
         await callApi("sendMessage", {
@@ -469,15 +1005,25 @@ export default {
       if (update.message?.text?.startsWith("/start")) {
         const chatId = update.message.chat.id;
         const userId = update.message.from.id;
-        const username = update.message.from.username || "no_username";
+        const username =
+          update.message.from.username || "no_username";
 
         const args = update.message.text.split(" ");
 
-        if (args.length > 1 && args[1].startsWith("ref_")) {
+        if (
+          args.length > 1 &&
+          args[1].startsWith("ref_")
+        ) {
           const referrerId = args[1].replace("ref_", "");
 
-          if (referrerId !== userId.toString() && kv) {
-            await kv.put(`ref_by:${userId}`, referrerId);
+          if (
+            referrerId !== userId.toString() &&
+            kv
+          ) {
+            await kv.put(
+              `ref_by:${userId}`,
+              referrerId
+            );
           }
         }
 
@@ -485,7 +1031,10 @@ export default {
           await kv.put(`user:${userId}`, username);
 
           if (username !== "no_username") {
-            await kv.put(`username_id:${username.toLowerCase()}`, userId.toString());
+            await kv.put(
+              `username_id:${username.toLowerCase()}`,
+              userId.toString()
+            );
           }
         }
 
@@ -500,8 +1049,14 @@ export default {
 
             const subMarkup = {
               inline_keyboard: [
-                [{ text: "📢 Подписаться", url: `https://t.me/${CHANNEL_ID.replace("@", "")}` }],
-                [{ text: "🔄 Проверить", callback_data: "check_sub" }]
+                [{
+                  text: "📢 Подписаться",
+                  url: `https://t.me/${CHANNEL_ID.replace("@", "")}`
+                }],
+                [{
+                  text: "🔄 Проверить",
+                  callback_data: "check_sub"
+                }]
               ]
             };
 
@@ -516,7 +1071,10 @@ export default {
           }
         }
 
-        const hasAccess = await checkAccess(userId, username);
+        const hasAccess = await checkAccess(
+          userId,
+          username
+        );
 
         let startText = "";
         let startMarkup = [];
@@ -532,13 +1090,14 @@ export default {
             `<code>@${BOT_USERNAME} [ссылка] [цена] [валюта]</code>\n\n` +
             `<b>Пример:</b>\n` +
             `<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>\n\n` +
-            `4. Нажмите на окошко, которое выскочит, и отправьте оффер.\n\n` +
             `👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
 
           startMarkup = [
-            [{ text: "🔗 Пригласить друга", callback_data: "invite_friend" }]
+            [{
+              text: "🔗 Пригласить друга",
+              callback_data: "invite_friend"
+            }]
           ];
-
         } else {
           startText =
             `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n` +
@@ -547,8 +1106,14 @@ export default {
             `👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
 
           startMarkup = [
-            [{ text: "💳 Купить доступ", callback_data: "buy_access" }],
-            [{ text: "🔗 Пригласить друга", callback_data: "invite_friend" }]
+            [{
+              text: "💳 Купить доступ",
+              callback_data: "buy_access"
+            }],
+            [{
+              text: "🔗 Пригласить друга",
+              callback_data: "invite_friend"
+            }]
           ];
         }
 
@@ -556,7 +1121,9 @@ export default {
           chat_id: chatId,
           text: startText,
           parse_mode: "HTML",
-          reply_markup: { inline_keyboard: startMarkup },
+          reply_markup: {
+            inline_keyboard: startMarkup
+          },
           disable_web_page_preview: true
         }, BOT_TOKEN);
       }
@@ -575,7 +1142,11 @@ export default {
           if (!subscribed) return new Response("OK");
         }
 
-        const hasAccess = await checkAccess(userId, username);
+        const hasAccess = await checkAccess(
+          userId,
+          username
+        );
+
         if (!hasAccess) return new Response("OK");
 
         let textQuery = iq.query
@@ -586,23 +1157,37 @@ export default {
 
         let lang = "ru";
 
-        if (textQuery.includes("eng") || textQuery.includes("en ")) {
+        if (
+          textQuery.includes("eng") ||
+          textQuery.includes("en ")
+        ) {
           lang = "en";
           textQuery = textQuery.replace(/eng/g, "").trim();
-        } else if (textQuery.includes("cn") || textQuery.includes("中文")) {
+        } else if (
+          textQuery.includes("cn") ||
+          textQuery.includes("中文")
+        ) {
           lang = "cn";
           textQuery = textQuery.replace(/cn/g, "").trim();
         }
 
         const allNums = textQuery.match(/\d+/g);
-        const amount = allNums ? allNums[allNums.length - 1] : "0";
+        const amount = allNums
+          ? allNums[allNums.length - 1]
+          : "0";
 
-        const giftMatch = textQuery.match(/(?:https?:\/\/)?(?:t\.me\/nft\/)?[A-Za-z0-9_-]+/i);
+        const giftMatch = textQuery.match(
+          /(?:https?:\/\/)?(?:t\.me\/nft\/)?[A-Za-z0-9_-]+/i
+        );
 
         let giftLink = "";
 
         if (giftMatch) {
-          let rawGift = giftMatch[0].replace(/^https?:\/\//, "");
+          const rawGift = giftMatch[0].replace(
+            /^https?:\/\//,
+            ""
+          );
+
           giftLink = rawGift.startsWith("t.me")
             ? "https://" + rawGift
             : "https://t.me/nft/" + rawGift;
@@ -611,18 +1196,31 @@ export default {
         let currencyType = "stars";
         let currencyDisplay = "⭐ Stars";
 
-        if (textQuery.includes("gram") || textQuery.includes("ton")) {
+        if (
+          textQuery.includes("gram") ||
+          textQuery.includes("ton")
+        ) {
           currencyType = "gram";
           currencyDisplay = "💎 Gram";
-        } else if (textQuery.includes("rub") || textQuery.includes("руб")) {
+        } else if (
+          textQuery.includes("rub") ||
+          textQuery.includes("руб")
+        ) {
           currencyType = "rub";
           currencyDisplay = "₽ Rub";
         }
 
         let senderName = iq.from.first_name || "";
 
-        if (iq.from.last_name) senderName += " " + iq.from.last_name;
-        if (!senderName) senderName = iq.from.username ? "@" + iq.from.username : "Игрок";
+        if (iq.from.last_name) {
+          senderName += " " + iq.from.last_name;
+        }
+
+        if (!senderName) {
+          senderName = iq.from.username
+            ? "@" + iq.from.username
+            : "Игрок";
+        }
 
         const targetReceiver = iq.from.username || "gwrex";
 
@@ -632,33 +1230,51 @@ export default {
         let titleText = "";
 
         if (lang === "en") {
-          text = `<b>Gift Offer</b>\n\nYou are offered <b>${amount} ${currencyDisplay}</b>\n${giftLink}`;
+          text =
+            `<b>Gift Offer</b>\n\n` +
+            `You are offered <b>${amount} ${currencyDisplay}</b>\n` +
+            `${giftLink}`;
+
           btnAccept = "Accept";
           btnDecline = "Decline";
           titleText = `Offer: ${amount} ${currencyDisplay}`;
 
         } else if (lang === "cn") {
-          text = `<b>礼物报价</b>\n\n有人为您提供 <b>${amount} ${currencyDisplay}</b>\n${giftLink}`;
+          text =
+            `<b>礼物报价</b>\n\n` +
+            `有人为您提供 <b>${amount} ${currencyDisplay}</b>\n` +
+            `${giftLink}`;
+
           btnAccept = "接受";
           btnDecline = "拒绝";
           titleText = `报价: ${amount} ${currencyDisplay}`;
 
         } else {
-          text = `<b>Оффер на подарок</b>\n\nВам предлагают <b>${amount} ${currencyDisplay}</b>\n${giftLink}`;
+          text =
+            `<b>Оффер на подарок</b>\n\n` +
+            `Вам предлагают <b>${amount} ${currencyDisplay}</b>\n` +
+            `${giftLink}`;
+
           titleText = `Оффер: ${amount} ${currencyDisplay}`;
         }
 
-        const offerId = Math.random().toString(36).substring(2, 10);
+        const offerId = Math.random()
+          .toString(36)
+          .substring(2, 10);
 
         if (kv) {
-          await kv.put(`offer:${offerId}`, JSON.stringify({
-            amount,
-            currencyType,
-            giftLink,
-            lang,
-            senderName,
-            targetReceiver
-          }), { expirationTtl: 86400 });
+          await kv.put(
+            `offer:${offerId}`,
+            JSON.stringify({
+              amount,
+              currencyType,
+              giftLink,
+              lang,
+              senderName,
+              targetReceiver
+            }),
+            { expirationTtl: 86400 }
+          );
         }
 
         const results = [{
@@ -672,8 +1288,14 @@ export default {
           },
           reply_markup: {
             inline_keyboard: [
-              [{ text: btnAccept, callback_data: `acc|${offerId}` }],
-              [{ text: btnDecline, callback_data: `dec|${offerId}` }]
+              [{
+                text: btnAccept,
+                callback_data: `acc|${offerId}`
+              }],
+              [{
+                text: btnDecline,
+                callback_data: `dec|${offerId}`
+              }]
             ]
           }
         }];
@@ -692,29 +1314,196 @@ export default {
       if (update.callback_query) {
         const cq = update.callback_query;
 
-        // Проверка подписки
+        // ------------------------------------------
+        // ПРОМОКОДЫ: ПЕРЕЛИСТЫВАНИЕ СПИСКА
+        // ------------------------------------------
+
+        if (cq.data.startsWith("promolist|")) {
+          if (cq.from.id !== ADMIN_ID) {
+            await answerCallback(
+              cq.id,
+              "⛔ Эта панель доступна только админу.",
+              true
+            );
+
+            return new Response("OK");
+          }
+
+          const page = parseInt(
+            cq.data.split("|")[1] || "0"
+          );
+
+          await answerCallback(cq.id);
+
+          await showPromos(
+            cq.message.chat.id,
+            page,
+            cq.message.message_id
+          );
+
+          return new Response("OK");
+        }
+
+        // ------------------------------------------
+        // ПРОМОКОДЫ: НАЖАТИЕ УДАЛИТЬ
+        // ------------------------------------------
+
+        if (cq.data.startsWith("promodel|")) {
+          if (cq.from.id !== ADMIN_ID) {
+            await answerCallback(
+              cq.id,
+              "⛔ Только администратор может удалять промокоды.",
+              true
+            );
+
+            return new Response("OK");
+          }
+
+          const parts = cq.data.split("|");
+          const code = parts[1];
+          const page = parseInt(parts[2] || "0");
+
+          await answerCallback(cq.id);
+
+          const promoExists = kv
+            ? await kv.get(`promo:${code}`)
+            : null;
+
+          if (!promoExists) {
+            await callApi("editMessageText", {
+              chat_id: cq.message.chat.id,
+              message_id: cq.message.message_id,
+              text: `❌ Промокод ${code} уже не существует.`,
+              reply_markup: {
+                inline_keyboard: [[
+                  {
+                    text: "⬅️ К списку",
+                    callback_data: `promolist|${page}`
+                  }
+                ]]
+              }
+            }, BOT_TOKEN);
+
+            return new Response("OK");
+          }
+
+          await callApi("editMessageText", {
+            chat_id: cq.message.chat.id,
+            message_id: cq.message.message_id,
+            text:
+              `⚠️ <b>УДАЛЕНИЕ ПРОМОКОДА</b>\n\n` +
+              `Ты действительно хочешь удалить код:\n` +
+              `🎟 <code>${code}</code>?\n\n` +
+              `История его использований также будет удалена.`,
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: [
+                [{
+                  text: "✅ Да, удалить",
+                  callback_data: `promoconfirm|${code}|${page}`
+                }],
+                [{
+                  text: "↩️ Отмена",
+                  callback_data: `promolist|${page}`
+                }]
+              ]
+            }
+          }, BOT_TOKEN);
+
+          return new Response("OK");
+        }
+
+        // ------------------------------------------
+        // ПРОМОКОДЫ: ПОДТВЕРЖДЕНИЕ УДАЛЕНИЯ
+        // ------------------------------------------
+
+        if (cq.data.startsWith("promoconfirm|")) {
+          if (cq.from.id !== ADMIN_ID) {
+            await answerCallback(
+              cq.id,
+              "⛔ Только администратор может удалять промокоды.",
+              true
+            );
+
+            return new Response("OK");
+          }
+
+          const parts = cq.data.split("|");
+          const code = parts[1];
+          const page = parseInt(parts[2] || "0");
+
+          await answerCallback(cq.id);
+
+          const promoExists = kv
+            ? await kv.get(`promo:${code}`)
+            : null;
+
+          if (!promoExists) {
+            await showPromos(
+              cq.message.chat.id,
+              page,
+              cq.message.message_id
+            );
+
+            return new Response("OK");
+          }
+
+          await deletePromoCompletely(code);
+
+          await callApi("editMessageText", {
+            chat_id: cq.message.chat.id,
+            message_id: cq.message.message_id,
+            text:
+              `🗑 <b>ПРОМОКОД УДАЛЁН</b>\n\n` +
+              `Код <code>${code}</code> удалён вместе с историей использований.`,
+            parse_mode: "HTML",
+            reply_markup: {
+              inline_keyboard: [[
+                {
+                  text: "⬅️ Вернуться к промокодам",
+                  callback_data: `promolist|${page}`
+                }
+              ]]
+            }
+          }, BOT_TOKEN);
+
+          return new Response("OK");
+        }
+
+        // ------------------------------------------
+        // ПРОВЕРКА ПОДПИСКИ
+        // ------------------------------------------
+
         if (cq.data === "check_sub") {
           const subscribed = await isSubscribed(cq.from.id);
 
           if (subscribed) {
-            await callApi("answerCallbackQuery", {
-              callback_query_id: cq.id,
-              text: "✅ Подписка подтверждена!",
-              show_alert: true
-            }, BOT_TOKEN);
+            await answerCallback(
+              cq.id,
+              "✅ Подписка подтверждена!",
+              true
+            );
 
             const chatId = cq.message.chat.id;
             const userId = cq.from.id;
-            const username = cq.from.username || "no_username";
+            const username =
+              cq.from.username || "no_username";
 
             if (kv) {
               await kv.put(`user:${userId}`, username);
+
               if (username !== "no_username") {
-                await kv.put(`username_id:${username.toLowerCase()}`, userId.toString());
+                await kv.put(
+                  `username_id:${username.toLowerCase()}`,
+                  userId.toString()
+                );
               }
             }
 
-            const hasAccess = await checkAccess(userId, username);
+            const hasAccess = await checkAccess(
+              userId,
+              username
+            );
 
             let startText = "";
             let startMarkup = [];
@@ -732,9 +1521,12 @@ export default {
                 `<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>\n\n` +
                 `👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
 
-              startMarkup = [
-                [{ text: "🔗 Пригласить друга", callback_data: "invite_friend" }]
-              ];
+              startMarkup = [[
+                {
+                  text: "🔗 Пригласить друга",
+                  callback_data: "invite_friend"
+                }
+              ]];
 
             } else {
               startText =
@@ -744,8 +1536,14 @@ export default {
                 `👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
 
               startMarkup = [
-                [{ text: "💳 Купить доступ", callback_data: "buy_access" }],
-                [{ text: "🔗 Пригласить друга", callback_data: "invite_friend" }]
+                [{
+                  text: "💳 Купить доступ",
+                  callback_data: "buy_access"
+                }],
+                [{
+                  text: "🔗 Пригласить друга",
+                  callback_data: "invite_friend"
+                }]
               ];
             }
 
@@ -754,26 +1552,30 @@ export default {
               message_id: cq.message.message_id,
               text: startText,
               parse_mode: "HTML",
-              reply_markup: { inline_keyboard: startMarkup },
+              reply_markup: {
+                inline_keyboard: startMarkup
+              },
               disable_web_page_preview: true
             }, BOT_TOKEN);
 
           } else {
-            await callApi("answerCallbackQuery", {
-              callback_query_id: cq.id,
-              text: "❌ Вы все еще не подписаны!",
-              show_alert: true
-            }, BOT_TOKEN);
+            await answerCallback(
+              cq.id,
+              "❌ Вы все еще не подписаны!",
+              true
+            );
           }
         }
 
-        // Приглашение друга
-        if (cq.data === "invite_friend") {
-          await callApi("answerCallbackQuery", {
-            callback_query_id: cq.id
-          }, BOT_TOKEN);
+        // ------------------------------------------
+        // ПРИГЛАШЕНИЕ ДРУГА
+        // ------------------------------------------
 
-          const refLink = `https://t.me/${BOT_USERNAME}?start=ref_${cq.from.id}`;
+        if (cq.data === "invite_friend") {
+          await answerCallback(cq.id);
+
+          const refLink =
+            `https://t.me/${BOT_USERNAME}?start=ref_${cq.from.id}`;
 
           const inviteText =
             `🔗 <b>Ваша реферальная ссылка:</b>\n\n` +
@@ -789,11 +1591,12 @@ export default {
           }, BOT_TOKEN);
         }
 
-        // Покупка доступа
+        // ------------------------------------------
+        // ПОКУПКА ДОСТУПА
+        // ------------------------------------------
+
         if (cq.data === "buy_access") {
-          await callApi("answerCallbackQuery", {
-            callback_query_id: cq.id
-          }, BOT_TOKEN);
+          await answerCallback(cq.id);
 
           const buyText =
             `💳 <b>Выберите способ оплаты:</b>\n\n` +
@@ -803,9 +1606,18 @@ export default {
 
           const buyMarkup = {
             inline_keyboard: [
-              [{ text: `⭐ Оплатить ${BASE_STARS_PRICE} Stars`, callback_data: "pay_stars" }],
-              [{ text: `💎 Оплатить ${BASE_TON_PRICE} TON`, callback_data: "pay_ton" }],
-              [{ text: "🎁 Ввести промокод", callback_data: "enter_promo" }]
+              [{
+                text: `⭐ Оплатить ${BASE_STARS_PRICE} Stars`,
+                callback_data: "pay_stars"
+              }],
+              [{
+                text: `💎 Оплатить ${BASE_TON_PRICE} TON`,
+                callback_data: "pay_ton"
+              }],
+              [{
+                text: "🎁 Ввести промокод",
+                callback_data: "enter_promo"
+              }]
             ]
           };
 
@@ -817,23 +1629,28 @@ export default {
           }, BOT_TOKEN);
         }
 
-        // Ввод промокода
+        // ------------------------------------------
+        // ВВОД ПРОМОКОДА
+        // ------------------------------------------
+
         if (cq.data === "enter_promo") {
-          await callApi("answerCallbackQuery", {
-            callback_query_id: cq.id
-          }, BOT_TOKEN);
+          await answerCallback(cq.id);
 
           await callApi("sendMessage", {
             chat_id: cq.message.chat.id,
-            text: "🎁 Отправьте промокод в чат (просто напишите код сообщением)."
+            text:
+              "🎁 Отправьте команду с промокодом:\n\n" +
+              "<code>/promo NEWYEAR2027</code>",
+            parse_mode: "HTML"
           }, BOT_TOKEN);
         }
 
-        // Оплата Stars
+        // ------------------------------------------
+        // ОПЛАТА STARS
+        // ------------------------------------------
+
         if (cq.data === "pay_stars") {
-          await callApi("answerCallbackQuery", {
-            callback_query_id: cq.id
-          }, BOT_TOKEN);
+          await answerCallback(cq.id);
 
           const text =
             `⭐ <b>Оплата ${BASE_STARS_PRICE} Stars</b>\n\n` +
@@ -848,11 +1665,12 @@ export default {
           }, BOT_TOKEN);
         }
 
-        // Оплата TON
+        // ------------------------------------------
+        // ОПЛАТА TON
+        // ------------------------------------------
+
         if (cq.data === "pay_ton") {
-          await callApi("answerCallbackQuery", {
-            callback_query_id: cq.id
-          }, BOT_TOKEN);
+          await answerCallback(cq.id);
 
           const text =
             `💎 <b>Оплата ${BASE_TON_PRICE} TON</b>\n\n` +
@@ -867,13 +1685,17 @@ export default {
           }, BOT_TOKEN);
         }
 
-        // Оплата Stars с промокодом
-        if (cq.data.startsWith("pay_promo_stars_")) {
-          await callApi("answerCallbackQuery", {
-            callback_query_id: cq.id
-          }, BOT_TOKEN);
+        // ------------------------------------------
+        // ОПЛАТА STARS С ПРОМОКОДОМ
+        // ------------------------------------------
 
-          const price = cq.data.replace("pay_promo_stars_", "");
+        if (cq.data.startsWith("pay_promo_stars_")) {
+          await answerCallback(cq.id);
+
+          const price = cq.data.replace(
+            "pay_promo_stars_",
+            ""
+          );
 
           const text =
             `⭐ <b>Оплата ${price} Stars (со скидкой)</b>\n\n` +
@@ -888,13 +1710,17 @@ export default {
           }, BOT_TOKEN);
         }
 
-        // Оплата TON с промокодом
-        if (cq.data.startsWith("pay_promo_ton_")) {
-          await callApi("answerCallbackQuery", {
-            callback_query_id: cq.id
-          }, BOT_TOKEN);
+        // ------------------------------------------
+        // ОПЛАТА TON С ПРОМОКОДОМ
+        // ------------------------------------------
 
-          const price = cq.data.replace("pay_promo_ton_", "");
+        if (cq.data.startsWith("pay_promo_ton_")) {
+          await answerCallback(cq.id);
+
+          const price = cq.data.replace(
+            "pay_promo_ton_",
+            ""
+          );
 
           const text =
             `💎 <b>Оплата ${price} TON (со скидкой)</b>\n\n` +
@@ -913,13 +1739,16 @@ export default {
         // ПРИНЯТИЕ И ОТКЛОНЕНИЕ ЧЕКОВ
         // ==========================================
 
-        if (cq.data.startsWith("approve_") || cq.data.startsWith("reject_")) {
+        if (
+          cq.data.startsWith("approve_") ||
+          cq.data.startsWith("reject_")
+        ) {
           if (cq.from.id !== ADMIN_ID) {
-            await callApi("answerCallbackQuery", {
-              callback_query_id: cq.id,
-              text: "⛔ Вы не админ.",
-              show_alert: true
-            }, BOT_TOKEN);
+            await answerCallback(
+              cq.id,
+              "⛔ Вы не админ.",
+              true
+            );
 
             return new Response("OK");
           }
@@ -929,42 +1758,73 @@ export default {
 
           if (action === "approve") {
             if (kv) {
-              await kv.put(`allowed_id:${targetUserId}`, "true");
+              await kv.put(
+                `allowed_id:${targetUserId}`,
+                "true"
+              );
             }
 
-            await callApi("answerCallbackQuery", {
-              callback_query_id: cq.id,
-              text: "Доступ выдан ✅"
-            }, BOT_TOKEN);
+            await answerCallback(
+              cq.id,
+              "Доступ выдан ✅"
+            );
 
-            await callApi("sendMessage", {
-              chat_id: targetUserId,
-              text: "✅ <b>Оплата подтверждена!</b>\n\nВам выдан доступ. Теперь вы можете создавать офферы.",
-              parse_mode: "HTML"
-            }, BOT_TOKEN);
+            try {
+              await callApi("sendMessage", {
+                chat_id: targetUserId,
+                text:
+                  "✅ <b>Оплата подтверждена!</b>\n\n" +
+                  "Вам выдан доступ. Теперь вы можете создавать офферы.",
+                parse_mode: "HTML"
+              }, BOT_TOKEN);
+            } catch (e) {
+              console.error(
+                "Не удалось отправить сообщение пользователю:",
+                e.message
+              );
+            }
 
             await callApi("editMessageCaption", {
               chat_id: cq.message.chat.id,
               message_id: cq.message.message_id,
-              caption: cq.message.caption + "\n\n✅ <b>Одобрено</b>",
+              caption:
+                (cq.message.caption || "") +
+                "\n\n✅ <b>Одобрено</b>",
               parse_mode: "HTML",
-              reply_markup: { inline_keyboard: [] }
+              reply_markup: {
+                inline_keyboard: []
+              }
             }, BOT_TOKEN);
 
             if (kv) {
-              const referrerId = await kv.get(`ref_by:${targetUserId}`);
+              const referrerId = await kv.get(
+                `ref_by:${targetUserId}`
+              );
 
-              if (referrerId && referrerId !== targetUserId) {
-                const refPromo = "REF" + Math.random().toString(36).substring(2, 8).toUpperCase();
+              if (
+                referrerId &&
+                referrerId !== targetUserId
+              ) {
+                const refPromo =
+                  "REF" +
+                  Math.random()
+                    .toString(36)
+                    .substring(2, 8)
+                    .toUpperCase();
 
-                await kv.put(`promo:${refPromo}`, JSON.stringify({
-                  discountStars: 100,
-                  discountTon: 1
-                }));
+                await kv.put(
+                  `promo:${refPromo}`,
+                  JSON.stringify({
+                    discountStars: 100,
+                    discountTon: 1
+                  })
+                );
 
-                await kv.put(`allowed_id:${referrerId}`, "true", {
-                  expirationTtl: 86400
-                });
+                await kv.put(
+                  `allowed_id:${referrerId}`,
+                  "true",
+                  { expirationTtl: 86400 }
+                );
 
                 await callApi("sendMessage", {
                   chat_id: referrerId,
@@ -980,23 +1840,36 @@ export default {
             }
 
           } else {
-            await callApi("answerCallbackQuery", {
-              callback_query_id: cq.id,
-              text: "Отклонено ❌"
-            }, BOT_TOKEN);
+            await answerCallback(
+              cq.id,
+              "Отклонено ❌"
+            );
 
-            await callApi("sendMessage", {
-              chat_id: targetUserId,
-              text: "❌ <b>Оплата отклонена.</b>\n\nЕсли вы уверены, что оплатили, свяжитесь с админом.",
-              parse_mode: "HTML"
-            }, BOT_TOKEN);
+            try {
+              await callApi("sendMessage", {
+                chat_id: targetUserId,
+                text:
+                  "❌ <b>Оплата отклонена.</b>\n\n" +
+                  "Если вы уверены, что оплатили, свяжитесь с админом.",
+                parse_mode: "HTML"
+              }, BOT_TOKEN);
+            } catch (e) {
+              console.error(
+                "Не удалось уведомить пользователя:",
+                e.message
+              );
+            }
 
             await callApi("editMessageCaption", {
               chat_id: cq.message.chat.id,
               message_id: cq.message.message_id,
-              caption: cq.message.caption + "\n\n❌ <b>Отклонено</b>",
+              caption:
+                (cq.message.caption || "") +
+                "\n\n❌ <b>Отклонено</b>",
               parse_mode: "HTML",
-              reply_markup: { inline_keyboard: [] }
+              reply_markup: {
+                inline_keyboard: []
+              }
             }, BOT_TOKEN);
           }
         }
@@ -1006,13 +1879,16 @@ export default {
         // ==========================================
 
         if (cq.data === "back_to_start") {
-          await callApi("answerCallbackQuery", {
-            callback_query_id: cq.id
-          }, BOT_TOKEN);
+          await answerCallback(cq.id);
 
           const userId = cq.from.id;
-          const username = cq.from.username || "no_username";
-          const hasAccess = await checkAccess(userId, username);
+          const username =
+            cq.from.username || "no_username";
+
+          const hasAccess = await checkAccess(
+            userId,
+            username
+          );
 
           let startText = "";
           let startMarkup = [];
@@ -1030,9 +1906,12 @@ export default {
               `<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>\n\n` +
               `👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
 
-            startMarkup = [
-              [{ text: "🔗 Пригласить друга", callback_data: "invite_friend" }]
-            ];
+            startMarkup = [[
+              {
+                text: "🔗 Пригласить друга",
+                callback_data: "invite_friend"
+              }
+            ]];
 
           } else {
             startText =
@@ -1042,8 +1921,14 @@ export default {
               `👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
 
             startMarkup = [
-              [{ text: "💳 Купить доступ", callback_data: "buy_access" }],
-              [{ text: "🔗 Пригласить друга", callback_data: "invite_friend" }]
+              [{
+                text: "💳 Купить доступ",
+                callback_data: "buy_access"
+              }],
+              [{
+                text: "🔗 Пригласить друга",
+                callback_data: "invite_friend"
+              }]
             ];
           }
 
@@ -1053,7 +1938,9 @@ export default {
               message_id: cq.message.message_id,
               text: startText,
               parse_mode: "HTML",
-              reply_markup: { inline_keyboard: startMarkup },
+              reply_markup: {
+                inline_keyboard: startMarkup
+              },
               disable_web_page_preview: true
             }, BOT_TOKEN);
           } catch (e) {}
@@ -1063,7 +1950,10 @@ export default {
         // ПРИНЯТИЕ И ОТКЛОНЕНИЕ ОФФЕРОВ
         // ==========================================
 
-        if (cq.data.startsWith("acc|") || cq.data.startsWith("dec|")) {
+        if (
+          cq.data.startsWith("acc|") ||
+          cq.data.startsWith("dec|")
+        ) {
           const dataParts = cq.data.split("|");
           const action = dataParts[0];
           const offerId = dataParts[1];
@@ -1081,30 +1971,42 @@ export default {
 
           if (kv) {
             const saved = await kv.get(`offer:${offerId}`);
-            if (saved) offer = JSON.parse(saved);
+
+            if (saved) {
+              offer = JSON.parse(saved);
+            }
           }
 
           const amount = offer.amount;
           const currencyType = offer.currencyType;
           const lang = offer.lang;
-          const targetReceiver = offer.targetReceiver || "gwrex";
+          const targetReceiver =
+            offer.targetReceiver || "gwrex";
 
           let displayCurrency = "⭐ Stars";
 
-          if (currencyType === "gram") displayCurrency = "💎 Gram";
-          if (currencyType === "rub") displayCurrency = "₽ Rub";
+          if (currencyType === "gram") {
+            displayCurrency = "💎 Gram";
+          }
+
+          if (currencyType === "rub") {
+            displayCurrency = "₽ Rub";
+          }
 
           let newText = "";
-          let newMarkup = { inline_keyboard: [] };
+          let newMarkup = {
+            inline_keyboard: []
+          };
 
           if (action === "acc") {
-            await callApi("answerCallbackQuery", {
-              callback_query_id: cq.id,
-              text: "Оффер принят ✅",
-              show_alert: true
-            }, BOT_TOKEN);
+            await answerCallback(
+              cq.id,
+              "Оффер принят ✅",
+              true
+            );
 
-            const finalUrl = "https://t.me/" + targetReceiver;
+            const finalUrl =
+              "https://t.me/" + targetReceiver;
 
             if (lang === "en") {
               newText =
@@ -1112,9 +2014,12 @@ export default {
                 `To receive <b>${amount} ${displayCurrency}</b>, send the gift to the seller.`;
 
               newMarkup = {
-                inline_keyboard: [
-                  [{ text: "Send Gift", url: finalUrl }]
-                ]
+                inline_keyboard: [[
+                  {
+                    text: "Send Gift",
+                    url: finalUrl
+                  }
+                ]]
               };
 
             } else if (lang === "cn") {
@@ -1123,9 +2028,12 @@ export default {
                 `要获得 <b>${amount} ${displayCurrency}</b>，请将礼物发送给卖家。`;
 
               newMarkup = {
-                inline_keyboard: [
-                  [{ text: "发送礼物", url: finalUrl }]
-                ]
+                inline_keyboard: [[
+                  {
+                    text: "发送礼物",
+                    url: finalUrl
+                  }
+                ]]
               };
 
             } else {
@@ -1134,16 +2042,17 @@ export default {
                 `Чтобы получить <b>${amount} ${displayCurrency}</b>, передайте подарок продавцу.`;
 
               newMarkup = {
-                inline_keyboard: [
-                  [{ text: "Передать подарок", url: finalUrl }]
-                ]
+                inline_keyboard: [[
+                  {
+                    text: "Передать подарок",
+                    url: finalUrl
+                  }
+                ]]
               };
             }
 
           } else {
-            await callApi("answerCallbackQuery", {
-              callback_query_id: cq.id
-            }, BOT_TOKEN);
+            await answerCallback(cq.id);
 
             newText = lang === "en"
               ? "❌ <b>Declined</b>"
@@ -1162,7 +2071,10 @@ export default {
                 disable_web_page_preview: true
               }, BOT_TOKEN);
             } catch (err) {
-              console.error("Ошибка изменения inline-оффера:", err.message);
+              console.error(
+                "Ошибка изменения inline-оффера:",
+                err.message
+              );
             }
 
           } else if (cq.message) {
@@ -1186,7 +2098,10 @@ export default {
               } catch (e) {}
 
             } catch (err) {
-              console.error("Ошибка обработки оффера:", err.message);
+              console.error(
+                "Ошибка обработки оффера:",
+                err.message
+              );
             }
           }
         }
@@ -1195,8 +2110,15 @@ export default {
       return new Response("OK", { status: 200 });
 
     } catch (error) {
-      console.error("КРИТИЧЕСКАЯ ОШИБКА:", error.message);
-      return new Response("Error: " + error.message, { status: 500 });
+      console.error(
+        "КРИТИЧЕСКАЯ ОШИБКА:",
+        error.message
+      );
+
+      return new Response(
+        "Error: " + error.message,
+        { status: 500 }
+      );
     }
   }
 };
@@ -1206,7 +2128,8 @@ export default {
 // ==========================================
 
 async function callApi(method, body, token) {
-  const url = `https://api.telegram.org/bot${token}/${method}`;
+  const url =
+    `https://api.telegram.org/bot${token}/${method}`;
 
   try {
     const response = await fetch(url, {
@@ -1226,7 +2149,11 @@ async function callApi(method, body, token) {
     return data;
 
   } catch (e) {
-    console.error(`Ошибка API [${method}]:`, e.message);
+    console.error(
+      `Ошибка API [${method}]:`,
+      e.message
+    );
+
     throw e;
   }
 }
