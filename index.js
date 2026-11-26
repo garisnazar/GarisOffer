@@ -1,8 +1,6 @@
-
 const ADMIN_ID = 5151757168;
 const WEBHOOK_SECRET = "GarisOffer9231998";
 const TON_WALLET = "UQChRfzub4CLp2FAV998bfowFC4eE3aqIRQQeZinoajQ0oOG";
-const SUPPORT_LINK = "https://t.me/gwrex";
 const BOT_USERNAME = "GarisOfferRobot";
 const CHANNEL_ID = "@GarisOfferChanel";
 
@@ -315,8 +313,7 @@ export default {
             await callApi("sendMessage", {
               chat_id: chatId,
               text:
-                "❌ Не удалось отправить чек администратору. " +
-                "Обратитесь в поддержку.",
+                "❌ Не удалось отправить чек администратору.",
               parse_mode: "HTML"
             }, BOT_TOKEN);
           } catch (sendError) {
@@ -1008,25 +1005,6 @@ export default {
         const username =
           update.message.from.username || "no_username";
 
-        const args = update.message.text.split(" ");
-
-        if (
-          args.length > 1 &&
-          args[1].startsWith("ref_")
-        ) {
-          const referrerId = args[1].replace("ref_", "");
-
-          if (
-            referrerId !== userId.toString() &&
-            kv
-          ) {
-            await kv.put(
-              `ref_by:${userId}`,
-              referrerId
-            );
-          }
-        }
-
         if (kv) {
           await kv.put(`user:${userId}`, username);
 
@@ -1089,30 +1067,19 @@ export default {
             `3. Выйдите в любой чат и напишите:\n\n` +
             `<code>@${BOT_USERNAME} [ссылка] [цена] [валюта]</code>\n\n` +
             `<b>Пример:</b>\n` +
-            `<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>\n\n` +
-            `👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
+            `<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>`;
 
-          startMarkup = [
-            [{
-              text: "🔗 Пригласить друга",
-              callback_data: "invite_friend"
-            }]
-          ];
+          startMarkup = [];
         } else {
           startText =
             `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n` +
             `🔒 <b>У вас нет доступа.</b>\n\n` +
-            `Вы можете купить доступ, нажав на кнопку ниже.\n\n` +
-            `👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
+            `Вы можете купить доступ, нажав на кнопку ниже.`;
 
           startMarkup = [
             [{
               text: "💳 Купить доступ",
               callback_data: "buy_access"
-            }],
-            [{
-              text: "🔗 Пригласить друга",
-              callback_data: "invite_friend"
             }]
           ];
         }
@@ -1518,31 +1485,20 @@ export default {
                 `3. Напишите в любом чате:\n\n` +
                 `<code>@${BOT_USERNAME} [ссылка] [цена] [валюта]</code>\n\n` +
                 `<b>Пример:</b>\n` +
-                `<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>\n\n` +
-                `👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
+                `<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>`;
 
-              startMarkup = [[
-                {
-                  text: "🔗 Пригласить друга",
-                  callback_data: "invite_friend"
-                }
-              ]];
+              startMarkup = [];
 
             } else {
               startText =
                 `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n` +
                 `🔒 <b>У вас нет доступа.</b>\n\n` +
-                `Вы можете купить доступ, нажав на кнопку ниже.\n\n` +
-                `👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
+                `Вы можете купить доступ, нажав на кнопку ниже.`;
 
               startMarkup = [
                 [{
                   text: "💳 Купить доступ",
                   callback_data: "buy_access"
-                }],
-                [{
-                  text: "🔗 Пригласить друга",
-                  callback_data: "invite_friend"
                 }]
               ];
             }
@@ -1565,30 +1521,6 @@ export default {
               true
             );
           }
-        }
-
-        // ------------------------------------------
-        // ПРИГЛАШЕНИЕ ДРУГА
-        // ------------------------------------------
-
-        if (cq.data === "invite_friend") {
-          await answerCallback(cq.id);
-
-          const refLink =
-            `https://t.me/${BOT_USERNAME}?start=ref_${cq.from.id}`;
-
-          const inviteText =
-            `🔗 <b>Ваша реферальная ссылка:</b>\n\n` +
-            `<code>${refLink}</code>\n\n` +
-            `<i>Отправьте её другу. Когда он купит доступ, вы получите:</i>\n` +
-            `🎁 Промокод на скидку 100 Stars\n` +
-            `⚡ 1 бесплатный оффер (доступ на 24 часа)!`;
-
-          await callApi("sendMessage", {
-            chat_id: cq.message.chat.id,
-            text: inviteText,
-            parse_mode: "HTML"
-          }, BOT_TOKEN);
         }
 
         // ------------------------------------------
@@ -1654,7 +1586,7 @@ export default {
 
           const text =
             `⭐ <b>Оплата ${BASE_STARS_PRICE} Stars</b>\n\n` +
-            `Переведите ${BASE_STARS_PRICE} звезд на аккаунт: <a href="${SUPPORT_LINK}">клик</a>\n\n` +
+            `Переведите ${BASE_STARS_PRICE} звезд на аккаунт: <a href="https://t.me/gwrex">клик</a>\n\n` +
             `После перевода отправьте скриншот чека сюда.`;
 
           await callApi("sendMessage", {
@@ -1699,7 +1631,7 @@ export default {
 
           const text =
             `⭐ <b>Оплата ${price} Stars (со скидкой)</b>\n\n` +
-            `Переведите ${price} звезд на аккаунт: <a href="${SUPPORT_LINK}">клик</a>\n\n` +
+            `Переведите ${price} звезд на аккаунт: <a href="https://t.me/gwrex">клик</a>\n\n` +
             `После перевода отправьте скриншот чека сюда.`;
 
           await callApi("sendMessage", {
@@ -1796,49 +1728,6 @@ export default {
               }
             }, BOT_TOKEN);
 
-            if (kv) {
-              const referrerId = await kv.get(
-                `ref_by:${targetUserId}`
-              );
-
-              if (
-                referrerId &&
-                referrerId !== targetUserId
-              ) {
-                const refPromo =
-                  "REF" +
-                  Math.random()
-                    .toString(36)
-                    .substring(2, 8)
-                    .toUpperCase();
-
-                await kv.put(
-                  `promo:${refPromo}`,
-                  JSON.stringify({
-                    discountStars: 100,
-                    discountTon: 1
-                  })
-                );
-
-                await kv.put(
-                  `allowed_id:${referrerId}`,
-                  "true",
-                  { expirationTtl: 86400 }
-                );
-
-                await callApi("sendMessage", {
-                  chat_id: referrerId,
-                  text:
-                    `🎉 <b>По вашей ссылке купили доступ!</b>\n\n` +
-                    `Ваши бонусы:\n` +
-                    `🎁 Промокод на 100 Stars (или 1 TON):\n` +
-                    `<code>${refPromo}</code>\n\n` +
-                    `⚡ Вам выдан <b>1 бесплатный оффер</b> (доступ к боту на 24 часа)!`,
-                  parse_mode: "HTML"
-                }, BOT_TOKEN);
-              }
-            }
-
           } else {
             await answerCallback(
               cq.id,
@@ -1903,31 +1792,20 @@ export default {
               `3. Напишите в любом чате:\n\n` +
               `<code>@${BOT_USERNAME} [ссылка] [цена] [валюта]</code>\n\n` +
               `<b>Пример:</b>\n` +
-              `<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>\n\n` +
-              `👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
+              `<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>`;
 
-            startMarkup = [[
-              {
-                text: "🔗 Пригласить друга",
-                callback_data: "invite_friend"
-              }
-            ]];
+            startMarkup = [];
 
           } else {
             startText =
               `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n` +
               `🔒 <b>У вас нет доступа.</b>\n\n` +
-              `Вы можете купить доступ, нажав на кнопку ниже.\n\n` +
-              `👨‍💻 <b>Поддержка:</b> <a href="${SUPPORT_LINK}">клик</a>`;
+              `Вы можете купить доступ, нажав на кнопку ниже.`;
 
             startMarkup = [
               [{
                 text: "💳 Купить доступ",
                 callback_data: "buy_access"
-              }],
-              [{
-                text: "🔗 Пригласить друга",
-                callback_data: "invite_friend"
               }]
             ];
           }
