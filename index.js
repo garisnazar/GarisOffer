@@ -1122,27 +1122,22 @@ export default {
           .trim()
           .toLowerCase();
 
+        // По умолчанию русский
         let lang = "ru";
 
-        // Обработка языков
-        if (
-          textQuery.includes("eng") ||
-          textQuery.includes("en ")
-        ) {
+        // Ищем ТОЛЬКО отдельные слова (en, cn, ar, ru), чтобы "stars" не ломал язык
+        if (/\b(en|eng)\b/.test(textQuery)) {
           lang = "en";
-          textQuery = textQuery.replace(/eng/g, "").replace(/en /g, "").trim();
-        } else if (
-          textQuery.includes("cn") ||
-          textQuery.includes("中文")
-        ) {
+          textQuery = textQuery.replace(/\b(en|eng)\b/g, "").trim();
+        } else if (/\bcn\b/.test(textQuery)) {
           lang = "cn";
-          textQuery = textQuery.replace(/cn/g, "").replace(/中文/g, "").trim();
-        } else if (
-          textQuery.includes("ar") ||
-          textQuery.includes("arabic")
-        ) {
+          textQuery = textQuery.replace(/\bcn\b/g, "").trim();
+        } else if (/\bar\b/.test(textQuery)) {
           lang = "ar";
-          textQuery = textQuery.replace(/arabic/g, "").replace(/ar/g, "").trim();
+          textQuery = textQuery.replace(/\bar\b/g, "").trim();
+        } else if (/\bru\b/.test(textQuery)) {
+          lang = "ru";
+          textQuery = textQuery.replace(/\bru\b/g, "").trim();
         }
 
         const allNums = textQuery.match(/\d+/g);
@@ -1203,42 +1198,22 @@ export default {
         let btnDecline = "Отклонить";
         let titleText = "";
 
+        // ТЕКСТЫ ДЛЯ ОФФЕРОВ (только 4 языка)
         if (lang === "en") {
-          text =
-            `<b>Gift Offer</b>\n\n` +
-            `You are offered <b>${amount} ${currencyDisplay}</b>\n` +
-            `${giftLink}`;
-
-          btnAccept = "Accept";
-          btnDecline = "Decline";
+          text = `<b>Gift Offer</b>\n\nYou are offered <b>${amount} ${currencyDisplay}</b>\n${giftLink}`;
+          btnAccept = "Accept"; btnDecline = "Decline";
           titleText = `Offer: ${amount} ${currencyDisplay}`;
-
         } else if (lang === "cn") {
-          text =
-            `<b>礼物报价</b>\n\n` +
-            `有人为您提供 <b>${amount} ${currencyDisplay}</b>\n` +
-            `${giftLink}`;
-
-          btnAccept = "接受";
-          btnDecline = "拒绝";
+          text = `<b>礼物报价</b>\n\n有人为您提供 <b>${amount} ${currencyDisplay}</b>\n${giftLink}`;
+          btnAccept = "接受"; btnDecline = "拒绝";
           titleText = `报价: ${amount} ${currencyDisplay}`;
-
         } else if (lang === "ar") {
-          text =
-            `<b>عرض هدية</b>\n\n` +
-            `تم تقديم لك <b>${amount} ${currencyDisplay}</b>\n` +
-            `${giftLink}`;
-
-          btnAccept = "قبول";
-          btnDecline = "رفض";
+          text = `<b>عرض هدية</b>\n\nتم تقديم لك <b>${amount} ${currencyDisplay}</b>\n${giftLink}`;
+          btnAccept = "قبول"; btnDecline = "رفض";
           titleText = `عرض: ${amount} ${currencyDisplay}`;
-
         } else {
-          text =
-            `<b>Оффер на подарок</b>\n\n` +
-            `Вам предлагают <b>${amount} ${currencyDisplay}</b>\n` +
-            `${giftLink}`;
-
+          // Русский (по умолчанию)
+          text = `<b>Оффер на подарок</b>\n\nВам предлагают <b>${amount} ${currencyDisplay}</b>\n${giftLink}`;
           titleText = `Оффер: ${amount} ${currencyDisplay}`;
         }
 
@@ -1895,98 +1870,39 @@ export default {
 
           if (action === "acc") {
             
-            // ИСПРАВЛЕНИЕ: Уведомления на нужном языке
-            if (lang === "en") {
-              await answerCallback(cq.id, "Offer accepted ✅", true);
-            } else if (lang === "cn") {
-              await answerCallback(cq.id, "已接受报价 ✅", true);
-            } else if (lang === "ar") {
-              await answerCallback(cq.id, "تم قبول العرض ✅", true);
-            } else {
-              await answerCallback(cq.id, "Оффер принят ✅", true);
-            }
+            // Уведомления (только 4 языка)
+            if (lang === "en") await answerCallback(cq.id, "Offer accepted ✅", true);
+            else if (lang === "cn") await answerCallback(cq.id, "已接受报价 ✅", true);
+            else if (lang === "ar") await answerCallback(cq.id, "تم قبول العرض ✅", true);
+            else await answerCallback(cq.id, "Оффер принят ✅", true);
 
-            const finalUrl =
-              "https://t.me/" + targetReceiver;
+            const finalUrl = "https://t.me/" + targetReceiver;
 
             if (lang === "en") {
-              newText =
-                `✅ <b>Accepted</b>\n\n` +
-                `To receive <b>${amount} ${displayCurrency}</b>, send the gift to the seller.`;
-
-              newMarkup = {
-                inline_keyboard: [[
-                  {
-                    text: "Send Gift",
-                    url: finalUrl
-                  }
-                ]]
-              };
-
+              newText = `✅ <b>Accepted</b>\n\nTo receive <b>${amount} ${displayCurrency}</b>, send the gift to the seller.`;
+              newMarkup = { inline_keyboard: [[{ text: "Send Gift", url: finalUrl }]] };
             } else if (lang === "cn") {
-              newText =
-                `✅ <b>已接受</b>\n\n` +
-                `要获得 <b>${amount} ${displayCurrency}</b>，请将礼物发送给卖家。`;
-
-              newMarkup = {
-                inline_keyboard: [[
-                  {
-                    text: "发送礼物",
-                    url: finalUrl
-                  }
-                ]]
-              };
-
+              newText = `✅ <b>已接受</b>\n\n要获得 <b>${amount} ${displayCurrency}</b>，请将礼物发送给卖家。`;
+              newMarkup = { inline_keyboard: [[{ text: "发送礼物", url: finalUrl }]] };
             } else if (lang === "ar") {
-              newText =
-                `✅ <b>مقبول</b>\n\n` +
-                `لتلقي <b>${amount} ${displayCurrency}</b>، يرجى إرسال الهدية إلى البائع.`;
-
-              newMarkup = {
-                inline_keyboard: [[
-                  {
-                    text: "إرسال الهدية",
-                    url: finalUrl
-                  }
-                ]]
-              };
-
+              newText = `✅ <b>مقبول</b>\n\nلتلقي <b>${amount} ${displayCurrency}</b>، يرجى إرسال الهدية إلى البائع.`;
+              newMarkup = { inline_keyboard: [[{ text: "إرسال الهدية", url: finalUrl }]] };
             } else {
-              newText =
-                `✅ <b>Принято</b>\n\n` +
-                `Чтобы получить <b>${amount} ${displayCurrency}</b>, передайте подарок продавцу.`;
-
-              newMarkup = {
-                inline_keyboard: [[
-                  {
-                    text: "Передать подарок",
-                    url: finalUrl
-                  }
-                ]]
-              };
+              newText = `✅ <b>Принято</b>\n\nЧтобы получить <b>${amount} ${displayCurrency}</b>, передайте подарок продавцу.`;
+              newMarkup = { inline_keyboard: [[{ text: "Передать подарок", url: finalUrl }]] };
             }
 
           } else {
-            // Отклонение
-            if (lang === "en") {
-              await answerCallback(cq.id, "Offer declined ❌", true);
-            } else if (lang === "cn") {
-              await answerCallback(cq.id, "已拒绝报价 ❌", true);
-            } else if (lang === "ar") {
-              await answerCallback(cq.id, "تم رفض العرض ❌", true);
-            } else {
-              await answerCallback(cq.id, "Оффер отклонен ❌", true);
-            }
+            // Отклонение (только 4 языка)
+            if (lang === "en") await answerCallback(cq.id, "Offer declined ❌", true);
+            else if (lang === "cn") await answerCallback(cq.id, "已拒绝报价 ❌", true);
+            else if (lang === "ar") await answerCallback(cq.id, "تم رفض العرض ❌", true);
+            else await answerCallback(cq.id, "Оффер отклонен ❌", true);
 
-            if (lang === "en") {
-              newText = "❌ <b>Declined</b>";
-            } else if (lang === "cn") {
-              newText = "❌ <b>已拒绝</b>";
-            } else if (lang === "ar") {
-              newText = "❌ <b>مرفوض</b>";
-            } else {
-              newText = "❌ <b>Отклонено</b>";
-            }
+            if (lang === "en") newText = "❌ <b>Declined</b>";
+            else if (lang === "cn") newText = "❌ <b>已拒绝</b>";
+            else if (lang === "ar") newText = "❌ <b>مرفوض</b>";
+            else newText = "❌ <b>Отклонено</b>";
           }
 
           if (cq.inline_message_id) {
