@@ -1065,7 +1065,6 @@ export default {
 
           startMarkup = [];
         } else {
-          // ОБНОВЛЕННЫЙ ТЕКСТ ДЛЯ ТЕХ, У КОГО НЕТ ДОСТУПА
           startText =
             `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n` +
             `🔒 <b>У вас нет доступа.</b>\n\n` +
@@ -1547,7 +1546,6 @@ export default {
         if (cq.data === "buy_access") {
           await answerCallback(cq.id);
 
-          // ОБНОВЛЕННЫЙ ТЕКСТ ДЛЯ МЕНЮ ПОКУПКИ
           const buyText =
             `💳 <b>Выберите способ оплаты:</b>\n\n` +
             `1. <b>${BASE_STARS_PRICE} ⭐ Stars</b> (перевод на аккаунт)\n` +
@@ -1601,21 +1599,51 @@ export default {
         }
 
         // ------------------------------------------
-        // ОПЛАТА STARS
+        // ОПЛАТА STARS (ОБНОВЛЕННЫЙ БЛОК)
         // ------------------------------------------
 
         if (cq.data === "pay_stars") {
           await answerCallback(cq.id);
 
           const text =
-            `⭐ <b>Оплата ${BASE_STARS_PRICE} Stars</b>\n\n` +
-            `Переведите ${BASE_STARS_PRICE} звезд на аккаунт: <a href="https://t.me/gwrex">клик</a>\n\n` +
-            `После перевода отправьте скриншот чека сюда.`;
+            `⭐ <b>Оплата доступа (${BASE_STARS_PRICE} Stars)</b>\n\n` +
+            `Выберите удобный для вас способ оплаты:\n\n` +
+            `1️⃣ <b>Официальный бот:</b>\n` +
+            `Купите ${BASE_STARS_PRICE} звезд в <a href="https://t.me/stars_mint_bot?start=ref_r9pmn25y44jk">Stars Mint Bot</a> и переведите их на аккаунт <b>@gwrex</b>.\n\n` +
+            `2️⃣ <b>Оплата подарком:</b>\n` +
+            `Отправьте подарок стоимостью <b>3 алмаза</b> (с учетом комиссии при обмене подарка на звезды) на аккаунт <b>@gwrex</b>.\n\n` +
+            `3️⃣ <b>Маркетплейсы:</b>\n` +
+            `Также можно официально приобрести звезды на площадках <b>PlayerOk</b> или <b>FunPay</b> (ищите продавцов с хорошими отзывами).\n\n` +
+            `⚠️ <i>После оплаты любым способом обязательно отправьте скриншот чека сюда!</i>`;
+
+          const markup = {
+            inline_keyboard: [
+              [
+                {
+                  text: "⭐ Купить через StarsMint Bot",
+                  url: "https://t.me/stars_mint_bot?start=ref_r9pmn25y44jk"
+                }
+              ],
+              [
+                {
+                  text: "🎁 Отправить подарок (3 алмаза)",
+                  url: "https://t.me/gwrex" 
+                }
+              ],
+              [
+                {
+                  text: "⬅️ Назад к выбору",
+                  callback_data: "buy_access"
+                }
+              ]
+            ]
+          };
 
           await callApi("sendMessage", {
             chat_id: cq.message.chat.id,
             text,
             parse_mode: "HTML",
+            reply_markup: markup,
             disable_web_page_preview: true
           }, BOT_TOKEN);
         }
