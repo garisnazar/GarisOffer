@@ -376,10 +376,6 @@ export default {
 
       // ==========================================
       // АДМИН: /createpromo
-      // Формат:
-      // /createpromo "CODE" "50 stars" "100"
-      // /createpromo "VIP2027" "навсегда" "50"
-      // 0 = без ограничений
       // ==========================================
 
       if (update.message?.text?.startsWith("/createpromo")) {
@@ -683,8 +679,6 @@ export default {
         }
 
         // СКИДКИ STARS / TON
-        // Старые реферальные промокоды discountStars/discountTon
-        // также остаются совместимыми.
 
         let discountStars = 0;
         let discountTon = 0;
@@ -1071,10 +1065,18 @@ export default {
 
           startMarkup = [];
         } else {
+          // ОБНОВЛЕННЫЙ ТЕКСТ ДЛЯ ТЕХ, У КОГО НЕТ ДОСТУПА
           startText =
             `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n` +
             `🔒 <b>У вас нет доступа.</b>\n\n` +
-            `Вы можете купить доступ, нажав на кнопку ниже.`;
+            `💡 <b>Что можно купить в боте?</b>\n` +
+            `Покупка доступа к созданию офферов на подарки!\n\n` +
+            `⭐ <b>Стоимость:</b> ${BASE_STARS_PRICE} Stars\n\n` +
+            `🛒 <b>Где купить Stars?</b>\n` +
+            `1️⃣ Официальный бот: <a href="https://t.me/stars_mint_bot?start=ref_r9pmn25y44jk">Stars Mint Bot</a>\n` +
+            `2️⃣ Маркетплейсы: FunPay или Playerok\n\n` +
+            `⚠️ <b>Важно:</b> Нужно купить именно ${BASE_STARS_PRICE} звезд (пополнение баланса), а не подарком. Если берете подарком — учитывайте комиссию при обмене подарка на звезды!\n\n` +
+            `👇 Вы можете оплатить доступ, нажав на кнопку ниже.`;
 
           startMarkup = [
             [{
@@ -1125,7 +1127,7 @@ export default {
         // По умолчанию русский
         let lang = "ru";
 
-        // Ищем ТОЛЬКО отдельные слова (en, cn, ar, ru), чтобы "stars" не ломал язык
+        // Ищем ТОЛЬКО отдельные слова (en, cn, ar, ru)
         if (/\b(en|eng)\b/.test(textQuery)) {
           lang = "en";
           textQuery = textQuery.replace(/\b(en|eng)\b/g, "").trim();
@@ -1200,21 +1202,37 @@ export default {
 
         // ТЕКСТЫ ДЛЯ ОФФЕРОВ (только 4 языка)
         if (lang === "en") {
-          text = `<b>Gift Offer</b>\n\nYou are offered <b>${amount} ${currencyDisplay}</b>\n${giftLink}`;
-          btnAccept = "Accept"; btnDecline = "Decline";
-          titleText = `Offer: ${amount} ${currencyDisplay}`;
+          text = `<b>🎁 Gift Offer</b>\n\n` +
+                 `<b>💰 Amount:</b> ${amount} ${currencyDisplay}\n` +
+                 `<b>👤 From:</b> ${senderName}\n\n` +
+                 `🔗 <a href="${giftLink}">Click to view the gift</a>\n\n` +
+                 `<i>Accept the offer if you want to sell this gift.</i>`;
+          btnAccept = "✅ Accept"; btnDecline = "❌ Decline";
+          titleText = `🎁 Offer: ${amount} ${currencyDisplay}`;
         } else if (lang === "cn") {
-          text = `<b>礼物报价</b>\n\n有人为您提供 <b>${amount} ${currencyDisplay}</b>\n${giftLink}`;
-          btnAccept = "接受"; btnDecline = "拒绝";
-          titleText = `报价: ${amount} ${currencyDisplay}`;
+          text = `<b>🎁 礼物报价</b>\n\n` +
+                 `<b>💰 金额:</b> ${amount} ${currencyDisplay}\n` +
+                 `<b>👤 来自:</b> ${senderName}\n\n` +
+                 `🔗 <a href="${giftLink}">点击查看礼物</a>\n\n` +
+                 `<i>如果您想出售此礼物，请接受报价。</i>`;
+          btnAccept = "✅ 接受"; btnDecline = "❌ 拒绝";
+          titleText = `🎁 报价: ${amount} ${currencyDisplay}`;
         } else if (lang === "ar") {
-          text = `<b>عرض هدية</b>\n\nتم تقديم لك <b>${amount} ${currencyDisplay}</b>\n${giftLink}`;
-          btnAccept = "قبول"; btnDecline = "رفض";
-          titleText = `عرض: ${amount} ${currencyDisplay}`;
+          text = `<b>🎁 عرض هدية</b>\n\n` +
+                 `<b>💰 المبلغ:</b> ${amount} ${currencyDisplay}\n` +
+                 `<b>👤 من:</b> ${senderName}\n\n` +
+                 `🔗 <a href="${giftLink}">انقر لعرض الهدية</a>\n\n` +
+                 `<i>اقبل العرض إذا كنت ترغب في بيع هذه الهدية.</i>`;
+          btnAccept = "✅ قبول"; btnDecline = "❌ رفض";
+          titleText = `🎁 عرض: ${amount} ${currencyDisplay}`;
         } else {
           // Русский (по умолчанию)
-          text = `<b>Оффер на подарок</b>\n\nВам предлагают <b>${amount} ${currencyDisplay}</b>\n${giftLink}`;
-          titleText = `Оффер: ${amount} ${currencyDisplay}`;
+          text = `<b>🎁 Оффер на подарок</b>\n\n` +
+                 `<b>💰 Сумма:</b> ${amount} ${currencyDisplay}\n` +
+                 `<b>👤 Отправитель:</b> ${senderName}\n\n` +
+                 `🔗 <a href="${giftLink}">Нажмите, чтобы посмотреть подарок</a>\n\n` +
+                 `<i>Примите оффер, если хотите продать этот подарок.</i>`;
+          titleText = `🎁 Оффер: ${amount} ${currencyDisplay}`;
         }
 
         const offerId = Math.random()
@@ -1240,7 +1258,7 @@ export default {
           type: "article",
           id: "1",
           title: titleText,
-          description: `${amount} ${currencyDisplay}`,
+          description: `Нажмите сюда, чтобы отправить предложение о покупке`,
           input_message_content: {
             message_text: text,
             parse_mode: "HTML"
@@ -1485,7 +1503,14 @@ export default {
               startText =
                 `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n` +
                 `🔒 <b>У вас нет доступа.</b>\n\n` +
-                `Вы можете купить доступ, нажав на кнопку ниже.`;
+                `💡 <b>Что можно купить в боте?</b>\n` +
+                `Покупка доступа к созданию офферов на подарки!\n\n` +
+                `⭐ <b>Стоимость:</b> ${BASE_STARS_PRICE} Stars\n\n` +
+                `🛒 <b>Где купить Stars?</b>\n` +
+                `1️⃣ Официальный бот: <a href="https://t.me/stars_mint_bot?start=ref_r9pmn25y44jk">Stars Mint Bot</a>\n` +
+                `2️⃣ Маркетплейсы: FunPay или Playerok\n\n` +
+                `⚠️ <b>Важно:</b> Нужно купить именно ${BASE_STARS_PRICE} звезд (пополнение баланса), а не подарком. Если берете подарком — учитывайте комиссию при обмене подарка на звезды!\n\n` +
+                `👇 Вы можете оплатить доступ, нажав на кнопку ниже.`;
 
               startMarkup = [
                 [{
@@ -1522,10 +1547,15 @@ export default {
         if (cq.data === "buy_access") {
           await answerCallback(cq.id);
 
+          // ОБНОВЛЕННЫЙ ТЕКСТ ДЛЯ МЕНЮ ПОКУПКИ
           const buyText =
             `💳 <b>Выберите способ оплаты:</b>\n\n` +
             `1. <b>${BASE_STARS_PRICE} ⭐ Stars</b> (перевод на аккаунт)\n` +
             `2. <b>${BASE_TON_PRICE} 💎 TON</b> (перевод на кошелек)\n\n` +
+            `🛒 <b>Где купить Stars?</b>\n` +
+            `1️⃣ Официальный бот: <a href="https://t.me/stars_mint_bot?start=ref_r9pmn25y44jk">Stars Mint Bot</a>\n` +
+            `2️⃣ Маркетплейсы: FunPay или Playerok\n\n` +
+            `⚠️ <b>Важно:</b> Покупайте ровно ${BASE_STARS_PRICE} звезд (пополнение баланса, не подарком). Если покупаете подарком — учитывайте комиссию при его обмене на звезды!\n\n` +
             `<i>После выбора способа вы получите реквизиты для оплаты.</i>`;
 
           const buyMarkup = {
@@ -1549,7 +1579,8 @@ export default {
             chat_id: cq.message.chat.id,
             text: buyText,
             parse_mode: "HTML",
-            reply_markup: buyMarkup
+            reply_markup: buyMarkup,
+            disable_web_page_preview: true
           }, BOT_TOKEN);
         }
 
@@ -1792,7 +1823,14 @@ export default {
             startText =
               `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n` +
               `🔒 <b>У вас нет доступа.</b>\n\n` +
-              `Вы можете купить доступ, нажав на кнопку ниже.`;
+              `💡 <b>Что можно купить в боте?</b>\n` +
+              `Покупка доступа к созданию офферов на подарки!\n\n` +
+              `⭐ <b>Стоимость:</b> ${BASE_STARS_PRICE} Stars\n\n` +
+              `🛒 <b>Где купить Stars?</b>\n` +
+              `1️⃣ Официальный бот: <a href="https://t.me/stars_mint_bot?start=ref_r9pmn25y44jk">Stars Mint Bot</a>\n` +
+              `2️⃣ Маркетплейсы: FunPay или Playerok\n\n` +
+              `⚠️ <b>Важно:</b> Нужно купить именно ${BASE_STARS_PRICE} звезд (пополнение баланса), а не подарком. Если берете подарком — учитывайте комиссию при обмене подарка на звезды!\n\n` +
+              `👇 Вы можете оплатить доступ, нажав на кнопку ниже.`;
 
             startMarkup = [
               [{
@@ -1870,7 +1908,7 @@ export default {
 
           if (action === "acc") {
             
-            // Уведомления (только 4 языка)
+            // Уведомления
             if (lang === "en") await answerCallback(cq.id, "Offer accepted ✅", true);
             else if (lang === "cn") await answerCallback(cq.id, "已接受报价 ✅", true);
             else if (lang === "ar") await answerCallback(cq.id, "تم قبول العرض ✅", true);
@@ -1879,21 +1917,33 @@ export default {
             const finalUrl = "https://t.me/" + targetReceiver;
 
             if (lang === "en") {
-              newText = `✅ <b>Accepted</b>\n\nTo receive <b>${amount} ${displayCurrency}</b>, send the gift to the seller.`;
-              newMarkup = { inline_keyboard: [[{ text: "Send Gift", url: finalUrl }]] };
+              newText = `✅ <b>OFFER ACCEPTED</b>\n\n` +
+                        `💰 <b>You will receive:</b> ${amount} ${displayCurrency}\n\n` +
+                        `📦 <b>Next step:</b> Send the gift to the seller.\n\n` +
+                        `👇 <i>Click the button below to proceed:</i>`;
+              newMarkup = { inline_keyboard: [[{ text: "🚀 Send Gift to Seller", url: finalUrl }]] };
             } else if (lang === "cn") {
-              newText = `✅ <b>已接受</b>\n\n要获得 <b>${amount} ${displayCurrency}</b>，请将礼物发送给卖家。`;
-              newMarkup = { inline_keyboard: [[{ text: "发送礼物", url: finalUrl }]] };
+              newText = `✅ <b>报价已接受</b>\n\n` +
+                        `💰 <b>您将获得:</b> ${amount} ${displayCurrency}\n\n` +
+                        `📦 <b>下一步:</b> 将礼物发送给卖家。\n\n` +
+                        `👇 <i>点击下方按钮继续:</i>`;
+              newMarkup = { inline_keyboard: [[{ text: "🚀 发送礼物给卖家", url: finalUrl }]] };
             } else if (lang === "ar") {
-              newText = `✅ <b>مقبول</b>\n\nلتلقي <b>${amount} ${displayCurrency}</b>، يرجى إرسال الهدية إلى البائع.`;
-              newMarkup = { inline_keyboard: [[{ text: "إرسال الهدية", url: finalUrl }]] };
+              newText = `✅ <b>تم قبول العرض</b>\n\n` +
+                        `💰 <b>ستتلقى:</b> ${amount} ${displayCurrency}\n\n` +
+                        `📦 <b>الخطوة التالية:</b> أرسل الهدية إلى البائع.\n\n` +
+                        `👇 <i>انقر على الزر أدناه للمتابعة:</i>`;
+              newMarkup = { inline_keyboard: [[{ text: "🚀 إرسال الهدية إلى البائع", url: finalUrl }]] };
             } else {
-              newText = `✅ <b>Принято</b>\n\nЧтобы получить <b>${amount} ${displayCurrency}</b>, передайте подарок продавцу.`;
-              newMarkup = { inline_keyboard: [[{ text: "Передать подарок", url: finalUrl }]] };
+              newText = `✅ <b>ОФФЕР ПРИНЯТ</b>\n\n` +
+                        `💰 <b>Вы получите:</b> ${amount} ${displayCurrency}\n\n` +
+                        `📦 <b>Что делать дальше:</b> Передайте подарок продавцу.\n\n` +
+                        `👇 <i>Нажмите на кнопку ниже, чтобы перейти к продавцу:</i>`;
+              newMarkup = { inline_keyboard: [[{ text: "🚀 Передать подарок продавцу", url: finalUrl }]] };
             }
 
           } else {
-            // Отклонение (только 4 языка)
+            // Отклонение
             if (lang === "en") await answerCallback(cq.id, "Offer declined ❌", true);
             else if (lang === "cn") await answerCallback(cq.id, "已拒绝报价 ❌", true);
             else if (lang === "ar") await answerCallback(cq.id, "تم رفض العرض ❌", true);
