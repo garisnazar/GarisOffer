@@ -1068,14 +1068,7 @@ export default {
           startText =
             `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n` +
             `🔒 <b>У вас нет доступа.</b>\n\n` +
-            `💡 <b>Что можно купить в боте?</b>\n` +
-            `Покупка доступа к созданию офферов на подарки!\n\n` +
-            `⭐ <b>Стоимость:</b> ${BASE_STARS_PRICE} Stars\n\n` +
-            `🛒 <b>Где купить Stars?</b>\n` +
-            `1️⃣ Официальный бот: <a href="https://t.me/stars_mint_bot?start=ref_r9pmn25y44jk">Stars Mint Bot</a>\n` +
-            `2️⃣ Маркетплейсы: FunPay или Playerok\n\n` +
-            `⚠️ <b>Важно:</b> Нужно купить именно ${BASE_STARS_PRICE} звезд (пополнение баланса), а не подарком. Если берете подарком — учитывайте комиссию при обмене подарка на звезды!\n\n` +
-            `👇 Вы можете оплатить доступ, нажав на кнопку ниже.`;
+            `Вы можете купить доступ, нажав на кнопку ниже.`;
 
           startMarkup = [
             [{
@@ -1502,14 +1495,7 @@ export default {
               startText =
                 `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n` +
                 `🔒 <b>У вас нет доступа.</b>\n\n` +
-                `💡 <b>Что можно купить в боте?</b>\n` +
-                `Покупка доступа к созданию офферов на подарки!\n\n` +
-                `⭐ <b>Стоимость:</b> ${BASE_STARS_PRICE} Stars\n\n` +
-                `🛒 <b>Где купить Stars?</b>\n` +
-                `1️⃣ Официальный бот: <a href="https://t.me/stars_mint_bot?start=ref_r9pmn25y44jk">Stars Mint Bot</a>\n` +
-                `2️⃣ Маркетплейсы: FunPay или Playerok\n\n` +
-                `⚠️ <b>Важно:</b> Нужно купить именно ${BASE_STARS_PRICE} звезд (пополнение баланса), а не подарком. Если берете подарком — учитывайте комиссию при обмене подарка на звезды!\n\n` +
-                `👇 Вы можете оплатить доступ, нажав на кнопку ниже.`;
+                `Вы можете купить доступ, нажав на кнопку ниже.`;
 
               startMarkup = [
                 [{
@@ -1599,7 +1585,7 @@ export default {
         }
 
         // ------------------------------------------
-        // ОПЛАТА STARS (ОБНОВЛЕННЫЙ БЛОК)
+        // ОПЛАТА STARS
         // ------------------------------------------
 
         if (cq.data === "pay_stars") {
@@ -1614,7 +1600,7 @@ export default {
             `Отправьте подарок стоимостью <b>3 алмаза</b> (с учетом комиссии при обмене подарка на звезды) на аккаунт <b>@gwrex</b>.\n\n` +
             `3️⃣ <b>Маркетплейсы:</b>\n` +
             `Также можно официально приобрести звезды на площадках <b>PlayerOk</b> или <b>FunPay</b> (ищите продавцов с хорошими отзывами).\n\n` +
-            `⚠️ <i>После оплаты любым способом обязательно отправьте скриншот чека сюда!</i>`;
+            `⚠️ <i>После оплаты нажмите кнопку ниже и отправьте скриншот чека!</i>`;
 
           const markup = {
             inline_keyboard: [
@@ -1628,6 +1614,12 @@ export default {
                 {
                   text: "🎁 Отправить подарок (3 алмаза)",
                   url: "https://t.me/gwrex" 
+                }
+              ],
+              [
+                {
+                  text: "✅ Я оплатил",
+                  callback_data: "paid_check"
                 }
               ],
               [
@@ -1659,11 +1651,43 @@ export default {
             `💎 <b>Оплата ${BASE_TON_PRICE} TON</b>\n\n` +
             `Переведите ${BASE_TON_PRICE} TON на кошелек:\n` +
             `<code>${TON_WALLET}</code>\n\n` +
-            `После перевода отправьте скриншот чека сюда.`;
+            `После перевода нажмите кнопку ниже и отправьте скриншот чека.`;
+
+          const markup = {
+            inline_keyboard: [
+              [
+                {
+                  text: "✅ Я оплатил",
+                  callback_data: "paid_check"
+                }
+              ],
+              [
+                {
+                  text: "⬅️ Назад к выбору",
+                  callback_data: "buy_access"
+                }
+              ]
+            ]
+          };
 
           await callApi("sendMessage", {
             chat_id: cq.message.chat.id,
             text,
+            parse_mode: "HTML",
+            reply_markup: markup
+          }, BOT_TOKEN);
+        }
+
+        // ------------------------------------------
+        // НОВЫЙ ОБРАБОТЧИК: Я ОПЛАТИЛ
+        // ------------------------------------------
+
+        if (cq.data === "paid_check") {
+          await answerCallback(cq.id);
+
+          await callApi("sendMessage", {
+            chat_id: cq.message.chat.id,
+            text: "📸 <b>Отлично!</b>\n\nОтправьте скриншот с оплатой, заявка будет обработана в течении 5 минут.",
             parse_mode: "HTML"
           }, BOT_TOKEN);
         }
@@ -1683,12 +1707,30 @@ export default {
           const text =
             `⭐ <b>Оплата ${price} Stars (со скидкой)</b>\n\n` +
             `Переведите ${price} звезд на аккаунт: <a href="https://t.me/gwrex">клик</a>\n\n` +
-            `После перевода отправьте скриншот чека сюда.`;
+            `После перевода нажмите кнопку ниже и отправьте скриншот чека.`;
+
+          const markup = {
+            inline_keyboard: [
+              [
+                {
+                  text: "✅ Я оплатил",
+                  callback_data: "paid_check"
+                }
+              ],
+              [
+                {
+                  text: "⬅️ Назад к выбору",
+                  callback_data: "buy_access"
+                }
+              ]
+            ]
+          };
 
           await callApi("sendMessage", {
             chat_id: cq.message.chat.id,
             text,
             parse_mode: "HTML",
+            reply_markup: markup,
             disable_web_page_preview: true
           }, BOT_TOKEN);
         }
@@ -1709,12 +1751,30 @@ export default {
             `💎 <b>Оплата ${price} TON (со скидкой)</b>\n\n` +
             `Переведите ${price} TON на кошелек:\n` +
             `<code>${TON_WALLET}</code>\n\n` +
-            `После перевода отправьте скриншот чека сюда.`;
+            `После перевода нажмите кнопку ниже и отправьте скриншот чека.`;
+
+          const markup = {
+            inline_keyboard: [
+              [
+                {
+                  text: "✅ Я оплатил",
+                  callback_data: "paid_check"
+                }
+              ],
+              [
+                {
+                  text: "⬅️ Назад к выбору",
+                  callback_data: "buy_access"
+                }
+              ]
+            ]
+          };
 
           await callApi("sendMessage", {
             chat_id: cq.message.chat.id,
             text,
-            parse_mode: "HTML"
+            parse_mode: "HTML",
+            reply_markup: markup
           }, BOT_TOKEN);
         }
 
@@ -1851,14 +1911,7 @@ export default {
             startText =
               `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n` +
               `🔒 <b>У вас нет доступа.</b>\n\n` +
-              `💡 <b>Что можно купить в боте?</b>\n` +
-              `Покупка доступа к созданию офферов на подарки!\n\n` +
-              `⭐ <b>Стоимость:</b> ${BASE_STARS_PRICE} Stars\n\n` +
-              `🛒 <b>Где купить Stars?</b>\n` +
-              `1️⃣ Официальный бот: <a href="https://t.me/stars_mint_bot?start=ref_r9pmn25y44jk">Stars Mint Bot</a>\n` +
-              `2️⃣ Маркетплейсы: FunPay или Playerok\n\n` +
-              `⚠️ <b>Важно:</b> Нужно купить именно ${BASE_STARS_PRICE} звезд (пополнение баланса), а не подарком. Если берете подарком — учитывайте комиссию при обмене подарка на звезды!\n\n` +
-              `👇 Вы можете оплатить доступ, нажав на кнопку ниже.`;
+              `Вы можете купить доступ, нажав на кнопку ниже.`;
 
             startMarkup = [
               [{
