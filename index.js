@@ -1063,7 +1063,16 @@ export default {
             `<b>Пример:</b>\n` +
             `<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>`;
 
-          startMarkup = [];
+          startMarkup = [
+            [{
+              text: "📖 Инструкция",
+              callback_data: "how_to_offer"
+            }],
+            [{
+              text: "👥 Наша группа",
+              url: "https://t.me/+24x_cIR6se01NWQy"
+            }]
+          ];
         } else {
           startText =
             `🆔 <b>Ваш ID:</b> <code>${userId}</code>\n\n` +
@@ -1074,6 +1083,10 @@ export default {
             [{
               text: "💳 Купить доступ",
               callback_data: "buy_access"
+            }],
+            [{
+              text: "👥 Наша группа",
+              url: "https://t.me/+24x_cIR6se01NWQy"
             }]
           ];
         }
@@ -1284,6 +1297,53 @@ export default {
         const cq = update.callback_query;
 
         // ------------------------------------------
+        // НОВЫЙ ОБРАБОТЧИК: КАК КИДАТЬ ОФФЕРЫ
+        // ------------------------------------------
+
+        if (cq.data === "how_to_offer") {
+          await answerCallback(cq.id);
+
+          const instructionText =
+            `📖 <b>ПОДРОБНАЯ ИНСТРУКЦИЯ: Как создать оффер</b>\n\n` +
+            `Чтобы предложить кому-то купить у него подарок, вам нужно создать инлайн-запрос.\n\n` +
+            `<b>Шаг 1: Найдите подарок</b>\n` +
+            `Зайдите в профиль человека, у которого есть нужный вам подарок.\n\n` +
+            `<b>Шаг 2: Скопируйте ссылку</b>\n` +
+            `Нажмите на подарок и выберите «Скопировать ссылку» (или скопируйте из адресной строки).\n\n` +
+            `<b>Шаг 3: Создайте оффер</b>\n` +
+            `Выйдите в <i>любой</i> чат (например, в «Избранное») и напишите:\n` +
+            `<code>@${BOT_USERNAME} [ссылка_на_подарок] [цена] [валюта]</code>\n\n` +
+            `<b>Пример 1 (в звездах):</b>\n` +
+            `<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>\n\n` +
+            `<b>Пример 2 (в TON):</b>\n` +
+            `<code>@${BOT_USERNAME} https://t.me/nft/PrettyPosy-5375 3 ton</code>\n\n` +
+            `<b>Шаг 4: Отправьте оффер</b>\n` +
+            `Бот предложит вам результат — нажмите на него, и оффер будет отправлен в чат.\n\n` +
+            `💡 <b>Полезные советы:</b>\n` +
+            `• Вы можете добавить код языка в конце (например, <code>en</code>, <code>cn</code>, <code>ar</code>), чтобы оффер пришел на нужном языке. По умолчанию — русский.\n` +
+            `• Цена и валюта могут быть любыми, но продавец должен согласиться.`;
+
+          const markup = {
+            inline_keyboard: [
+              [
+                {
+                  text: "⬅️ В главное меню",
+                  callback_data: "back_to_start"
+                }
+              ]
+            ]
+          };
+
+          await callApi("sendMessage", {
+            chat_id: cq.message.chat.id,
+            text: instructionText,
+            parse_mode: "HTML",
+            reply_markup: markup,
+            disable_web_page_preview: true
+          }, BOT_TOKEN);
+        }
+
+        // ------------------------------------------
         // ПРОМОКОДЫ: ПЕРЕЛИСТЫВАНИЕ СПИСКА
         // ------------------------------------------
 
@@ -1489,7 +1549,16 @@ export default {
                 `<b>Пример:</b>\n` +
                 `<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>`;
 
-              startMarkup = [];
+              startMarkup = [
+                [{
+                  text: "📖 Инструкция",
+                  callback_data: "how_to_offer"
+                }],
+                [{
+                  text: "👥 Наша группа",
+                  url: "https://t.me/+24x_cIR6se01NWQy"
+                }]
+              ];
 
             } else {
               startText =
@@ -1501,6 +1570,10 @@ export default {
                 [{
                   text: "💳 Купить доступ",
                   callback_data: "buy_access"
+                }],
+                [{
+                  text: "👥 Наша группа",
+                  url: "https://t.me/+24x_cIR6se01NWQy"
                 }]
               ];
             }
@@ -1812,13 +1885,24 @@ export default {
               "Доступ выдан ✅"
             );
 
+            // ОБНОВЛЕННЫЙ БЛОК ОТПРАВКИ СООБЩЕНИЯ ПОЛЬЗОВАТЕЛЮ
             try {
               await callApi("sendMessage", {
                 chat_id: targetUserId,
                 text:
                   "✅ <b>Оплата подтверждена!</b>\n\n" +
-                  "Вам выдан доступ. Теперь вы можете создавать офферы.",
-                parse_mode: "HTML"
+                  "Вам выдан доступ. Теперь вы можете создавать офферы.\n\n" +
+                  "👋 <b>Добро пожаловать в нашу группу!</b>\n" +
+                  "Там вы найдете новости, полезные советы и сможете общаться с другими пользователями:\n" +
+                  "👉 <a href=\"https://t.me/+24x_cIR6se01NWQy\">Вступить в группу</a>",
+                parse_mode: "HTML",
+                disable_web_page_preview: true,
+                reply_markup: {
+                  inline_keyboard: [
+                    [{ text: "📖 Как кидать офферы", callback_data: "how_to_offer" }],
+                    [{ text: "👥 Наша группа", url: "https://t.me/+24x_cIR6se01NWQy" }]
+                  ]
+                }
               }, BOT_TOKEN);
             } catch (e) {
               console.error(
@@ -1905,7 +1989,16 @@ export default {
               `<b>Пример:</b>\n` +
               `<code>@${BOT_USERNAME} t.me/nft/PrettyPosy-5375 500 stars</code>`;
 
-            startMarkup = [];
+            startMarkup = [
+              [{
+                text: "📖 Инструкция",
+                callback_data: "how_to_offer"
+              }],
+              [{
+                text: "👥 Наша группа",
+                url: "https://t.me/+24x_cIR6se01NWQy"
+              }]
+            ];
 
           } else {
             startText =
@@ -1917,6 +2010,10 @@ export default {
               [{
                 text: "💳 Купить доступ",
                 callback_data: "buy_access"
+              }],
+              [{
+                text: "👥 Наша группа",
+                url: "https://t.me/+24x_cIR6se01NWQy"
               }]
             ];
           }
